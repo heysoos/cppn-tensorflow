@@ -28,7 +28,6 @@ import random
 import PIL
 from PIL import Image
 import pylab
-from model import CPPN
 import matplotlib.pyplot as plt
 import images2gif
 from images2gif import writeGif
@@ -39,14 +38,19 @@ from random import sample
 from copy import deepcopy
 from audio_loader import load_audio
 from os import path, makedirs
+import json
+
+# from model import CPPN
+from model2 import CPPN
 
 # mgc = get_ipython().magic
 # mgc(u'matplotlib inline')
 # pylab.rcParams['figure.figsize'] = (10.0, 10.0)
 
 class Sampler():
-    def __init__(self, z_dim=8, c_dim=1, scale=10.0, net_size=32, num_layers=8, img=None):
-        self.cppn = CPPN(z_dim=z_dim, c_dim=c_dim, scale=scale, net_size=net_size, num_layers=num_layers, img=img)
+    def __init__(self, z_dim=8, c_dim=1, scale=10.0, net_size=32, num_layers=8, seed=0, img=None):
+        self.cppn = CPPN(z_dim=z_dim, c_dim=c_dim, scale=scale,
+                         net_size=net_size, num_layers=num_layers, seed=seed, img=img)
         self.z = self.generate_z()  # saves most recent z here, in case we find a nice image and want the z-vec
 
     def reinit(self):
@@ -93,15 +97,16 @@ class Sampler():
         image_data is a tensor, in [height width depth]
         image_data is NOT the PIL.Image class
         '''
-        plt.subplot(1, 1, 1)
+        ax = plt.subplot(1, 1, 1)
         y_dim = image_data.shape[0]
         x_dim = image_data.shape[1]
         c_dim = self.cppn.c_dim
         if c_dim > 1:
-            plt.imshow(image_data, interpolation='nearest')
+            ax.imshow(image_data, interpolation='nearest')
         else:
-            plt.imshow(image_data.reshape(y_dim, x_dim), cmap='Greys', interpolation='nearest')
+            ax.imshow(image_data.reshape(y_dim, x_dim), cmap='Greys', interpolation='nearest')
         plt.axis('off')
+        ax.set_aspect('equal', 'box')
         plt.show()
 
 
@@ -383,11 +388,12 @@ class Sampler():
         amp = self.generate_amp(sound, fs, fps)[0:total_frames]
         start_frame = 0
 
-        z1 = z1[0]
+        # z1 = z1[0]
         r = z1 / np.max(np.abs(z1))
         # r1 = z1[0:8] / np.max(z1[0:8]) * r_global
         # r2 = z1[8:16] / np.max(z1[8:16]) * r_global
-        r = r * r_global
+        # r = r * r_global
+        r = r_global
 
         # r = np.logspace(np.log(1), np.log(0.5), amp.shape[1])
         # r = r_global * (amp_sums - np.min(amp_sums) + 0.001) / np.max(amp_sums)  # radius of periodicity controlled by total amplitude
@@ -412,7 +418,9 @@ class Sampler():
             # amp /= np.max(amp)
             # amp -= np.median(amp, axis=0)
             # amp = np.cumsum(amp, axis=0)
-            freq = [1, 1, 2, 2, 2, 3, 3, 3]
+            # freq = [1, 1, 2, 2, 2, 3, 3, 3]
+            freq = [1, 3, 6, 6, 3, 2, 1, 1]
+            # freq = np.power(freq, 2)
             freq = np.multiply(w_scaler, freq)
 
             amp = -np.cumsum(amp, axis=0)
@@ -462,7 +470,9 @@ class Sampler():
         # theta = np.stack(theta)
         # theta = theta / theta[-1, :]
 
-        freq = [1, 1, 2, 2, 2, 3, 3, 3]
+        # used to scale delta_thetas
+        # freq = [1, 1, 2, 2, 2, 3, 3, 3]
+        freq = [1, 3, 6, 6, 3, 2, 1, 1]
         freq = np.multiply(w_scaler, freq)
         ## THESE FREQUENCIES USED TO BE DIFFERENT, THATS WHY THERES A THETA1 AND THETA2
         rand_freq1 = freq
@@ -626,6 +636,15 @@ class Sampler():
 
         return zip_mat
 
+    def saveJSON(self, data, filename):
+        with open(filename, 'w') as outfile:
+            outfile.write(json.dumps(data, indent=4, sort_keys=True))
+
+    def loadJSON(self, filename):
+        with open(filename) as json_file:
+            data = json.load(json_file)
+
+        return data
 # imgs = []
 # x_dim = 512
 # y_dim = 512
@@ -696,44 +715,64 @@ class Sampler():
 
 
 ########### MUSIC TESTS ##################
-# net_size = [32, 32, 32, 16, 8, 4]
-# num_layers = 6
+# seed = 12345678
+# np.random.seed(seed=seed)
+#
+# total_neurons = 250
+# num_layers = 5
+# w = 1.25
+# alpha = 5
+# mu = 0.1*np.log(2/total_neurons)
+# l = np.arange(0, num_layers, dtype=float)
+#
+# net_size = total_neurons * np.exp(mu*l/num_layers)*(alpha + np.sin(-w * l))
+# Cn = np.sum(net_size / total_neurons)
+# # net_size[net_size < 2] += 1
+# net_size = net_size / Cn
+# # net_size = np.array([int(np.round(x + 5*np.random.random())) for x in net_size])
+# net_size = np.array([int(np.round(x)) for x in net_size])
+# net_size[net_size < 2] += 1
+#
+#
 # c_dim = 3
 # img_null = tf.zeros((640, 640))
 # sampler = Sampler(z_dim = 16, scale = 8, net_size = net_size,
 #                   num_layers=num_layers, c_dim=c_dim, img=img_null)
 #
-# z2 = sampler.generate_z()
+# z2 = sampler.generate_z()[0]
 # img = None
+#
+# z_scale = 10
+# z_factor = np.random.normal(size=16) * z_scale
+#
+# sortidx = np.argsort(np.abs(z_factor))
+# sortidy = np.argsort(np.abs(z2[0]))
+#
+# z_factor = z_factor[sortidx]
+# z2 = z2[sortidy]
+#
+#
+# zz = z2 * z_factor
+# print(zz)
 # #
-# global_scale = 1
-#
-# z_factor = np.random.random(3) * global_scale
-# z_factor = np.sort(z_factor)[::-1]
-#
-# # C =  np.random.random() + global_scale
-# zz = np.concatenate((z_factor[0] * z2[0:4] ,
-#                      z_factor[1] * z2[4:12],
-#                      z_factor[2] * z2[12:16]))
-# # f_params = [10, 2, 10, 10, 0]
-# f_params = [1, 50, 0, 0, 0]
+# f_params = [15, 0.1, 0, 0, 0]
 #
 #
 # # img_data = sampler.generate(z1)
 # # sampler.show_image(img_data)
 #
-# audiopath = 'sculpted_short.mp3'
+# audiopath = 'media/muy-tranquilo-short3.mp3'
 # acceleration = False
-# exp_gain = 1
-# w_scaler = 3
+# exp_gain = 2.5
+# w_scaler = 1
 # f_amp_w = True
 # normalize_w = False
 #
 # time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
 # figname = 'save/' + time + '.gif'
-# sampler.save_music_anim_gif(zz, r_global=0.04, audiopath=audiopath, filename=figname,
-#                             x_dim = 640, y_dim = 640, scale=10, f_params=f_params,
-#                             n_frame=145, img=None,
+# sampler.save_music_anim_gif(zz, r_global=0.015, audiopath=audiopath, filename=figname,
+#                             x_dim = 640, y_dim = 640, scale=1, f_params=f_params,
+#                             n_frame=322, img=None,
 #                             acceleration=acceleration,
 #                             exp_gain=exp_gain, w_scaler=w_scaler,
 #                             normalize_w=normalize_w,

@@ -20,8 +20,8 @@ def linear(input_, output_size, scope=None, stddev=1.0, bias_start=0.0, with_w=F
         else:
             return tf.matmul(input_, matrix) + bias
 
-def fully_connected(input_, output_size, scope=None, stddev=1.0, with_bias = True,
-                    clip = False, clip_min = None, clip_max=None):
+def fully_connected(input_, output_size, scope=None, stddev=1.0, with_bias=True,
+                    clip=False, clip_min=None, clip_max=None):
     shape = input_.get_shape().as_list()
 
     with tf.variable_scope(scope or "FC"):

@@ -14,7 +14,7 @@ from ops import *
 
 class CPPN():
     def __init__(self, batch_size=1, z_dim=32, x_dim=512, y_dim=512, c_dim=1, img=None,
-                 scale=8.0, net_size=32, num_layers=8):
+                 scale=8.0, net_size=32, num_layers=8, seed=0):
         """
 
         Args:
@@ -24,6 +24,8 @@ class CPPN():
         scale: the bigger, the more zoomed out the picture becomes
 
         """
+        np.random.seed(seed)
+        tf.random.set_random_seed(seed)
 
         self.batch_size = batch_size
         self.net_size = net_size
@@ -43,15 +45,15 @@ class CPPN():
         self.x_vec, self.y_vec, self.r_vec, self.f_vec = self._coordinates(x_dim, y_dim, scale=scale, img=img)
 
         # latent vector
-        self.z = tf.placeholder(tf.float32, [self.batch_size, self.z_dim])
+        self.z = tf.placeholder(tf.float32, [self.batch_size, self.z_dim], name='z')
         # inputs to cppn, like coordinates and radius from centre
-        self.x = tf.placeholder(tf.float32, [self.batch_size, None, 1])
-        self.y = tf.placeholder(tf.float32, [self.batch_size, None, 1])
-        self.r = tf.placeholder(tf.float32, [self.batch_size, None, 1])
+        self.x = tf.placeholder(tf.float32, [self.batch_size, None, 1], name='x')
+        self.y = tf.placeholder(tf.float32, [self.batch_size, None, 1], name='y')
+        self.r = tf.placeholder(tf.float32, [self.batch_size, None, 1], name='r')
 
         # Sina's inputs
-        self.f = [tf.placeholder(tf.float32, [self.batch_size, None, 1])
-                  for _ in range(0, len(self.f_vec))]
+        self.f = [tf.placeholder(tf.float32, [self.batch_size, None, 1], name='f_' + str(i))
+                  for i in range(0, len(self.f_vec))]
 
         # builds the generator network
         # self.G = self.generator(x_dim = self.x_dim, y_dim = self.y_dim)
@@ -75,7 +77,8 @@ class CPPN():
         self.sess.run(init)
 
     def reinit(self):
-        init = tf.initialize_variables(tf.trainable_variables())
+        # init = tf.initialize_variables(tf.trainable_variables())
+        init = tf.global_variables_initializer()
 
         # TODO: tf.variables_initializer??
         self.sess.run(init)
@@ -194,155 +197,156 @@ class CPPN():
         return x_mat, y_mat, r_mat, f_mat
 
     def generator(self, x_dim=512, y_dim=512, reuse=False):
+        with tf.variable_scope("generator") as scope:
 
-        if reuse:
-            tf.get_variable_scope().reuse_variables()
+            if reuse:
+               scope.reuse_variables()
 
-        net_size = self.net_size
-        if np.size(net_size) < 2:
-            net_size = np.tile(net_size, self.num_layers)
-        n_points = x_dim * y_dim
+            net_size = self.net_size
+            if np.size(net_size) < 2:
+                net_size = np.tile(net_size, self.num_layers)
+            n_points = x_dim * y_dim
 
-        # note that latent vector z is scaled to self.scale factor.
-        z_scaled = tf.reshape(self.z, [self.batch_size, 1, self.z_dim]) * \
-                   tf.ones([n_points, 1], dtype=tf.float32) * self.scale
-        z_unroll = tf.reshape(z_scaled, [self.batch_size * n_points, self.z_dim])
-        x_unroll = tf.reshape(self.x, [self.batch_size * n_points, 1])
-        y_unroll = tf.reshape(self.y, [self.batch_size * n_points, 1])
-        r_unroll = tf.reshape(self.r, [self.batch_size * n_points, 1])
+            # note that latent vector z is scaled to self.scale factor.
+            z_scaled = tf.reshape(self.z, [self.batch_size, 1, self.z_dim]) * \
+                       tf.ones([n_points, 1], dtype=tf.float32) * self.scale
+            z_unroll = tf.reshape(z_scaled, [self.batch_size * n_points, self.z_dim])
+            x_unroll = tf.reshape(self.x, [self.batch_size * n_points, 1])
+            y_unroll = tf.reshape(self.y, [self.batch_size * n_points, 1])
+            r_unroll = tf.reshape(self.r, [self.batch_size * n_points, 1])
 
-        f_unroll = [tf.reshape(self.f[0], [self.batch_size * n_points, 1])]
-        for i in range(1, len(self.f)):
-            f_unroll.append(tf.reshape(self.f[i], [self.batch_size * n_points, 1]))
+            f_unroll = [tf.reshape(self.f[0], [self.batch_size * n_points, 1])]
+            for i in range(1, len(self.f)):
+                f_unroll.append(tf.reshape(self.f[i], [self.batch_size * n_points, 1]))
 
-        U = fully_connected(z_unroll, net_size[0], 'g_0_z') + \
-            fully_connected(x_unroll, net_size[0], 'g_0_x', with_bias=False) + \
-            fully_connected(y_unroll, net_size[0], 'g_0_y', with_bias=False) + \
-            fully_connected(r_unroll, net_size[0], 'g_0_r', with_bias=False)
+            U = fully_connected(z_unroll, net_size[0], 'g_0_z') + \
+                fully_connected(x_unroll, net_size[0], 'g_0_x', with_bias=False) + \
+                fully_connected(y_unroll, net_size[0], 'g_0_y', with_bias=False) + \
+                fully_connected(r_unroll, net_size[0], 'g_0_r', with_bias=False)
 
-        for i in range(0, len(f_unroll)):
-            U += fully_connected(f_unroll[i], net_size[0], 'g_0_f' + str(i), with_bias=False)
+            for i in range(0, len(f_unroll)):
+                U += fully_connected(f_unroll[i], net_size[0], 'g_0_f' + str(i), with_bias=False)
 
-        '''
-        Below are a bunch of examples of different CPPN configurations.
-        Feel free to comment out and experiment!
-        '''
+            '''
+            Below are a bunch of examples of different CPPN configurations.
+            Feel free to comment out and experiment!
+            '''
 
-        ###
-        ### Example: 3 layers of tanh() layers, with net_size = 32 activations/layer
-        ###
-        # # '''
-        H = tf.nn.tanh(U)
-        for i in range(self.num_layers):
-            # H = tf.nn.tanh(tf.math.pow(fully_connected(H, net_size[i], 'g_tanh_' + str(i)), 1))
-            # H = tf.nn.tanh(tf.math.pow(
-            #     fully_connected(H, net_size[i], 'g_tanh_' + str(i), clip = True, clip_min=-1, clip_max=1), 3))
+            ###
+            ### Example: 3 layers of tanh() layers, with net_size = 32 activations/layer
+            ###
+            # # '''
+            H = tf.nn.tanh(U)
+            for i in range(self.num_layers):
+                # H = tf.nn.tanh(tf.math.pow(fully_connected(H, net_size[i], 'g_tanh_' + str(i)), 1))
+                # H = tf.nn.tanh(tf.math.pow(
+                #     fully_connected(H, net_size[i], 'g_tanh_' + str(i), clip = True, clip_min=-1, clip_max=1), 3))
 
-            # H = tf.nn.relu(tf.math.pow(
-            #     fully_connected(H, net_size[i], 'g_relu_' + str(i)), 1))
+                # H = tf.nn.relu(tf.math.pow(
+                #     fully_connected(H, net_size[i], 'g_relu_' + str(i)), 1))
 
-            # H = tf.nn.tanh(tf.math.pow(
-            #     fully_connected(H, net_size[i], 'g_tanh_' + str(i)), 3))
-
-            H = tf.reshape(H, [self.batch_size, x_dim, y_dim, -1])
-
-            ## convolution layer
-            H = tf.layers.conv2d(
-                inputs=H,
-                filters=net_size[i],
-                kernel_size=[5, 5],
-                padding="same",
-                activation=tf.nn.tanh,
-                name='g_conv_' + str(i))
-
-        H  = tf.reshape(H, [self.batch_size * n_points, - 1])
-
-            # H = lrelu(H)
-            # H = tf.nn.dropout(fully_connected(H, net_size[i], 'g_dropout_' + str(i)), keep_prob=0.9)
-            # H = tf.nn.softplus(fully_connected(H, net_size[i], 'g_softplus_' + str(i)))
-            # H = conv2d(tf.reshape(H, [1, x_dim, y_dim, net_size]), net_size[i], name='g_conv_' +str(i), d_h=1, d_w=1)
-            # H = tf.reshape(H, [n_points, net_size[i]])
-            # H = lrelu(conv2d(tf.reshape(H, [1, x_dim, y_dim, net_size]), 20, name = 'g_conv_' + str(i)))
-
-        # if the last layer is not added to residuals, do so (to ensure matrices are same as size as other layers)
-        # if (self.num_layers % layer_skip) is not 0:
-        #     Hr += tf.tanh(fully_connected(H, net_size[i], 'g_tanh_r_' + str(i)))
-
-        # Hr = tf.sigmoid(fully_connected(Hr, c_dim, 'g_tanh_r_' + str(i)))
-
-        # output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
-        # output = 0.5 * tf.sin(fully_connected(H, self.c_dim, 'g_final')) + 0.5
-        # output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
-        output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
-        # output = 0.5 * tf.nn.tanh(fully_connected(H, self.c_dim, 'g_final')) + 0.5
-        # '''
-
-        ###
-        ### Sina's weird residuals
-        # H = tf.nn.tanh(U)
-        # Hr = tf.nn.tanh(fully_connected(H, self.c_dim, 'g_r_init_' + str(i)))
-        # layer_skip = 1  # residal layers per normal layer
-        # for i in range(self.num_layers):
-        #     if (i + 1) % layer_skip is 0:  # accumulate residuals every layer_skip
-        #         Hr  += tf.nn.tanh(tf.math.pow(
-        #             fully_connected(H, self.c_dim, 'g_tanh_r_' + str(i)), 3))
-        #     H = tf.nn.tanh(tf.math.pow(
-        #         fully_connected(H, net_size[i], 'g_tanh_' + str(i), clip = True, clip_min=-1e2, clip_max=1), 3))
-        #
-        # Hr = tf.nn.tanh(tf.math.pow(Hr, 3))
-        # output = tf.sigmoid(tf.math.add(fully_connected(H, self.c_dim, 'g_final'), Hr))
-        ###
+                H = tf.nn.tanh(tf.math.pow(
+                    fully_connected(H, net_size[i], 'g_tanh_' + str(i)), 3))
 
 
-        ###
-        ### Similar to example above, but instead the output is
-        ### a weird function rather than just the sigmoid
-        '''
-        H = tf.nn.tanh(U)
-        for i in range(self.num_layers):
-          H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_'+str(i)))
-        output = tf.sqrt(1.0-tf.abs(tf.tanh(fully_connected(H, self.c_dim, 'g_final'))))
-        '''
+                # ## convolution layers
+                # H = tf.reshape(H, [self.batch_size, x_dim, y_dim, -1])
+                # H = tf.layers.conv2d(
+                #     inputs=H,
+                #     filters=net_size[i],
+                #     kernel_size=[5, 5],
+                #     padding="same",
+                #     activation=tf.nn.tanh,
+                #     name='g_conv_' + str(i))
 
-        ###
-        ### Example: mixing softplus and tanh layers, with net_size = 32 activations/layer
-        ###
-        '''
-        H = tf.nn.tanh(U)
-        H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_1'))
-        H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_2'))
-        H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_2'))
-        H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_2'))
-        H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_2'))
-        output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
-        '''
+            H  = tf.reshape(H, [self.batch_size * n_points, - 1])
 
-        ###
-        ### Example: mixing sinusoids, tanh and multiple softplus layers
-        ###
-        '''
-        H = tf.nn.tanh(U)
-        H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_1'))
-        H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_2'))
-        H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_2'))
-        output = 0.5 * tf.sin(fully_connected(H, self.c_dim, 'g_final')) + 0.5
-        '''
+                # H = lrelu(H)
+                # H = tf.nn.dropout(fully_connected(H, net_size[i], 'g_dropout_' + str(i)), keep_prob=0.9)
+                # H = tf.nn.softplus(fully_connected(H, net_size[i], 'g_softplus_' + str(i)))
+                # H = conv2d(tf.reshape(H, [1, x_dim, y_dim, net_size]), net_size[i], name='g_conv_' +str(i), d_h=1, d_w=1)
+                # H = tf.reshape(H, [n_points, net_size[i]])
+                # H = lrelu(conv2d(tf.reshape(H, [1, x_dim, y_dim, net_size]), 20, name = 'g_conv_' + str(i)))
 
-        ###
-        ### Example: residual network of 4 tanh() layers
-        ###
-        '''
-        H = tf.nn.tanh(U)
-        for i in range(3):
-          H = H+tf.nn.tanh(fully_connected(H, net_size, g_tanh_'+str(i)))
-        output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
-        '''
+            # if the last layer is not added to residuals, do so (to ensure matrices are same as size as other layers)
+            # if (self.num_layers % layer_skip) is not 0:
+            #     Hr += tf.tanh(fully_connected(H, net_size[i], 'g_tanh_r_' + str(i)))
 
-        '''
-        The final hidden later is pass thru a fully connected sigmoid later, so outputs -> (0, 1)
-        Also, the output has a dimention of c_dim, so can be monotone or RGB
-        '''
-        result = tf.reshape(output, [self.batch_size, y_dim, x_dim, self.c_dim])
+            # Hr = tf.sigmoid(fully_connected(Hr, c_dim, 'g_tanh_r_' + str(i)))
+
+            # output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
+            # output = 0.5 * tf.sin(fully_connected(H, self.c_dim, 'g_final')) + 0.5
+            # output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
+            output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
+            # output = 0.5 * tf.nn.tanh(fully_connected(H, self.c_dim, 'g_final')) + 0.5
+            # '''
+
+            ###
+            ### Sina's weird residuals
+            # H = tf.nn.tanh(U)
+            # Hr = tf.nn.tanh(fully_connected(H, self.c_dim, 'g_r_init_' + str(i)))
+            # layer_skip = 1  # residal layers per normal layer
+            # for i in range(self.num_layers):
+            #     if (i + 1) % layer_skip is 0:  # accumulate residuals every layer_skip
+            #         Hr  += tf.nn.tanh(tf.math.pow(
+            #             fully_connected(H, self.c_dim, 'g_tanh_r_' + str(i)), 3))
+            #     H = tf.nn.tanh(tf.math.pow(
+            #         fully_connected(H, net_size[i], 'g_tanh_' + str(i), clip = True, clip_min=-1e2, clip_max=1), 3))
+            #
+            # Hr = tf.nn.tanh(tf.math.pow(Hr, 3))
+            # output = tf.sigmoid(tf.math.add(fully_connected(H, self.c_dim, 'g_final'), Hr))
+            ###
+
+
+            ###
+            ### Similar to example above, but instead the output is
+            ### a weird function rather than just the sigmoid
+            '''
+            H = tf.nn.tanh(U)
+            for i in range(self.num_layers):
+              H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_'+str(i)))
+            output = tf.sqrt(1.0-tf.abs(tf.tanh(fully_connected(H, self.c_dim, 'g_final'))))
+            '''
+
+            ###
+            ### Example: mixing softplus and tanh layers, with net_size = 32 activations/layer
+            ###
+            '''
+            H = tf.nn.tanh(U)
+            H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_1'))
+            H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_2'))
+            H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_2'))
+            H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_2'))
+            H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_2'))
+            output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
+            '''
+
+            ###
+            ### Example: mixing sinusoids, tanh and multiple softplus layers
+            ###
+            '''
+            H = tf.nn.tanh(U)
+            H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_1'))
+            H = tf.nn.tanh(fully_connected(H, net_size, 'g_tanh_2'))
+            H = tf.nn.softplus(fully_connected(H, net_size, 'g_softplus_2'))
+            output = 0.5 * tf.sin(fully_connected(H, self.c_dim, 'g_final')) + 0.5
+            '''
+
+            ###
+            ### Example: residual network of 4 tanh() layers
+            ###
+            '''
+            H = tf.nn.tanh(U)
+            for i in range(3):
+              H = H+tf.nn.tanh(fully_connected(H, net_size, g_tanh_'+str(i)))
+            output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
+            '''
+
+            '''
+            The final hidden later is pass thru a fully connected sigmoid later, so outputs -> (0, 1)
+            Also, the output has a dimention of c_dim, so can be monotone or RGB
+            '''
+            result = tf.reshape(output, [self.batch_size, y_dim, x_dim, self.c_dim])
 
         return result
 
