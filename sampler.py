@@ -25,7 +25,7 @@ import numpy as np
 import tensorflow as tf
 import math
 import random
-import PIL
+# import PIL
 from PIL import Image
 import pylab
 import matplotlib.pyplot as plt
@@ -40,8 +40,8 @@ from audio_loader import load_audio
 from os import path, makedirs
 import json
 
-# from model import CPPN
-from model2 import CPPN
+from model import CPPN
+
 
 # mgc = get_ipython().magic
 # mgc(u'matplotlib inline')
@@ -636,6 +636,8 @@ class Sampler():
 
         return zip_mat
 
+
+    # TODO: save NN weight data (maybe use JSON only for the other params?)
     def saveJSON(self, data, filename):
         with open(filename, 'w') as outfile:
             outfile.write(json.dumps(data, indent=4, sort_keys=True))
@@ -645,6 +647,30 @@ class Sampler():
             data = json.load(json_file)
 
         return data
+
+    def generate_architecture(self, total_neurons, num_layers, w, alpha, mu):
+
+        # exp. decay factor, normalized such that last layer is around 2 neurons
+        mu = mu * np.log(2 / total_neurons)
+
+        l = np.arange(0, num_layers, dtype=float)
+
+        # net_size = C_n * exp( mu * l / L) * (a + sin(-w*l)
+        net_size = total_neurons * np.exp(mu * l / num_layers) * (alpha + np.sin(-w * l))
+
+        # 'integration factor' to keep sum(net_size) as close to total_neurons as possible
+        Cn = np.sum(net_size / total_neurons)
+        net_size = net_size / Cn
+        net_size = np.array([int(np.round(x)) for x in net_size])
+
+        # ensure no layers with less than 2 neurons (makes the architecture trivial)
+        # subtract the neurons added from the first layer (usually the largest layer)
+        deficit = net_size[net_size < 2]
+        net_size[net_size < 2] += 1
+        net_size[0] -= deficit
+        # print(net_size)
+
+        return net_size
 # imgs = []
 # x_dim = 512
 # y_dim = 512
@@ -778,8 +804,8 @@ class Sampler():
 #                             normalize_w=normalize_w,
 #                             f_amp_w=f_amp_w)
 
-############# HIRES IMAGES ##################
-# net_size = [32, 32, 32, 16, 8, 4]
+############ HIRES IMAGES ##################
+# net_size = [32, 32, 32, 16, 16, 16, 8, 8, 8, 4, 4, 4]
 # num_layers = 6
 # c_dim = 3
 # img_null = tf.zeros((640, 640))
@@ -797,11 +823,11 @@ class Sampler():
 # f_params = [1, 0, 0, 0, 0]
 #
 #
-# img_data = sampler.generate_hires(z1, res=512, x_res_factor=5, y_res_factor=5,
+# img_data = sampler.generate_hires(z1, res=512, x_res_factor=10, y_res_factor=10,
 #                                   scale=5, f_params=f_params, img=None)
 # sampler.show_image(img_data)
 # time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
-# figname = 'save/' + time + '.png'
+# figname = 'save/hires/' + time + '.png'
 # imageio.imwrite(figname, (img_data * 255).astype(np.uint8), format='png')
 
 ################# CATERPILLAR IMAGES ##################
