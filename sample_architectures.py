@@ -5,7 +5,7 @@ from os import path, makedirs
 from datetime import datetime
 import imageio
 import matplotlib.pyplot as plt
-from multiprocessing import Process
+from multiprocessing import Process, Pool
 
 # seed = 12345678
 # np.random.seed(seed=seed)
@@ -31,14 +31,20 @@ from multiprocessing import Process
 # plt.show()
 
 def generate_params():
-    total_neurons = [50, 250, 500]
+    # total_neurons = [50, 250, 500]
+    # num_layers = [3, 5, 10]
+    # omega = [0, 0.5, 1, 1.5]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    # alpha = [2, 5, 10]  # constant factor that controls the amplitude of the sinusoid (>2)
+    # mu = [0, 0.2, 0.5, 1]  # exp. decay rate
+
+    total_neurons = [250]
     num_layers = [3, 5, 10]
-    omega = [0, 0.5, 1, 1.5]  # sinusoidal frequency (affects bottleneck shape and frequency)
-    alpha = [2, 5, 10]  # constant factor that controls the amplitude of the sinusoid (>2)
-    mu = [0, 0.2, 0.5, 1]  # exp. decay rate
+    omega = [0, 0.5, 1.5]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
+    mu = [0.5, 1]  # exp. decay rate
 
     params = [total_neurons, num_layers, omega, alpha, mu]
-    params = list(itertools.product(*params))
+    params = [list(tup) for tup in list(itertools.product(*params))]
 
     return params
 
@@ -79,20 +85,28 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
     img_sampler.cppn.close()  # necessary?!
 
 
+# if __name__ == "__main__":
+#     params = generate_params()
+#
+#     procs = []
+#     # proc = Process(target=generate_image) # instantiating without any argument
+#     # procs.append(proc)
+#     # proc.start()
+#
+#     # instantiating process with arguments
+#     for param in params:
+#         proc = Process(target=generate_images, args=param)
+#         procs.append(proc)
+#         proc.start()
+#         # proc.join()  # complete the processes
+#
+#     # # complete the processes
+#     for proc in procs:
+#         proc.join()
+
+
 if __name__ == "__main__":
     params = generate_params()
 
-    procs = []
-    # proc = Process(target=generate_image) # instantiating without any argument
-    # procs.append(proc)
-    # proc.start()
-
-    # instantiating process with arguments
-    for param in params:
-        proc = Process(target=generate_images, args=param)
-        procs.append(proc)
-        proc.start()
-
-    # complete the processes
-    for proc in procs:
-        proc.join()
+    pool = Pool(processes=11)
+    pool.map(generate_images, params)
