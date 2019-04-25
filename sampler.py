@@ -648,15 +648,15 @@ class Sampler():
 
         return data
 
-    def generate_architecture(self, total_neurons, num_layers, w, alpha, mu):
+def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
 
         # exp. decay factor, normalized such that last layer is around 2 neurons
         mu = mu * np.log(2 / total_neurons)
 
-        l = np.arange(0, num_layers, dtype=float)
+        l = np.arange(1, num_layers + 1, dtype=float)
 
         # net_size = C_n * exp( mu * l / L) * (a + sin(-w*l)
-        net_size = total_neurons * np.exp(mu * l / num_layers) * (alpha + np.sin(-w * l))
+        net_size = total_neurons * np.exp(mu * l / num_layers) * (alpha + np.sin(-omega * l))
 
         # 'integration factor' to keep sum(net_size) as close to total_neurons as possible
         Cn = np.sum(net_size / total_neurons)
@@ -665,7 +665,7 @@ class Sampler():
 
         # ensure no layers with less than 2 neurons (makes the architecture trivial)
         # subtract the neurons added from the first layer (usually the largest layer)
-        deficit = net_size[net_size < 2]
+        deficit = np.sum(net_size[net_size < 2])
         net_size[net_size < 2] += 1
         net_size[0] -= deficit
         # print(net_size)

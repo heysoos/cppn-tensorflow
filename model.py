@@ -350,18 +350,19 @@ class CPPN():
 
         return result
 
-    def generate(self, z=None, x_dim=26, y_dim=26, scale=8.0, f_params=None, img = None):
+    def generate(self, z=None, x_dim=26, y_dim=26, scale=8.0, f_params=None, img=None):
         """ Generate data by sampling from latent space.
 
         If z is not None, data for this point in latent space is
         generated. Otherwise, z is drawn from prior in latent
         space.
-        TODO: offset
+        TODO: offset, remove null img if possible...
         """
         if z is None:
             z = np.random.uniform(-1.0, 1.0, size=(self.batch_size, self.z_dim)).astype(np.float32)
             # Note: This maps to mean of distribution, we could alternatively
             # sample from Gaussian distribution
+
         G = self.generator(x_dim=x_dim, y_dim=y_dim, reuse=True)
         x_vec, y_vec, r_vec, f_vec = self._coordinates(x_dim, y_dim, scale=scale, f_params=f_params, img=img)
         # create dict for tf.sess
