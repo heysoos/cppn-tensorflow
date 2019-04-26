@@ -37,11 +37,11 @@ def generate_params():
     # alpha = [2, 5, 10]  # constant factor that controls the amplitude of the sinusoid (>2)
     # mu = [0, 0.2, 0.5, 1]  # exp. decay rate
 
-    total_neurons = [50, 100, 250]
-    num_layers = [3, 5, 10, 20]
-    omega = [0, 0.5, 1.5]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    total_neurons = [100, 250, 500]
+    num_layers = [3, 5, 10]
+    omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
     alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
-    mu = [0.1, 0.5, 1]  # exp. decay rate
+    mu = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]  # exp. decay rate
 
     params = [total_neurons, num_layers, omega, alpha, mu]
     params = list(itertools.product(*params))
@@ -116,16 +116,16 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
 
 
 if __name__ == "__main__":
-    # params = generate_params()
+    params = generate_params()
+
+    pool = Pool(processes=11)
+    pool.starmap(generate_images, params)
+
+    # total_neurons = 250
+    # num_layers = 20
+    # omega = 0.5
+    # alpha = 2
+    # mu = 0
     #
-    # pool = Pool(processes=11)
-    # pool.starmap(generate_images, params)
-
-    total_neurons = 250
-    num_layers = 20
-    omega = 0.5
-    alpha = 2
-    mu = 0
-
-    net_size = sampler.generate_architecture(total_neurons, num_layers, omega, alpha, mu)
+    # net_size = sampler.generate_architecture(total_neurons, num_layers, omega, alpha, mu)
 
