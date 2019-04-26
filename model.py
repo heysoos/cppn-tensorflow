@@ -446,3 +446,4 @@ class CPPN():
 
     def close(self):
         self.sess.close()
+        tf.reset_default_graph()  # necessary?!

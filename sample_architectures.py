@@ -44,7 +44,8 @@ def generate_params():
     mu = [0.5, 1]  # exp. decay rate
 
     params = [total_neurons, num_layers, omega, alpha, mu]
-    params = [list(tup) for tup in list(itertools.product(*params))]
+    params = list(itertools.product(*params))
+    # params = [list(tup) for tup in list(itertools.product(*params))]
 
     return params
 
@@ -76,13 +77,16 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
     img_data = img_sampler.generate(zz, x_dim=512, y_dim=512, scale=1,
                                 f_params=f_params, img=img)
 
-    time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
+    # time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
+    params_str = 'N{}_L{}_w{}_a{}_m{}'.format(total_neurons, num_layers, omega, alpha, mu)
     folder = 'save/img_architectures/'
     if not path.exists(folder):
         makedirs(folder)
-    figname = folder + time + '.png'
+    # figname = folder + time + '.png'
+    figname = folder + params_str + '.png'
     imageio.imwrite(figname, (img_data * 255).astype(np.uint8), format='png')
     img_sampler.cppn.close()  # necessary?!
+
 
 
 # if __name__ == "__main__":
@@ -109,4 +113,4 @@ if __name__ == "__main__":
     params = generate_params()
 
     pool = Pool(processes=11)
-    pool.map(generate_images, params)
+    pool.starmap(generate_images, params)
