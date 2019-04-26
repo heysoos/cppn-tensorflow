@@ -27,6 +27,7 @@ def fully_connected(input_, output_size, scope=None, stddev=1.0, with_bias=True,
     with tf.variable_scope(scope or "FC"):
         matrix = tf.get_variable("Matrix", [shape[1], output_size], tf.float32,
             tf.random_normal_initializer(stddev=stddev))
+            # tf.random_uniform_initializer(minval=-3, maxval=3))
 
         if clip:
             matrix = tf.clip_by_value(matrix, clip_min, clip_max)
