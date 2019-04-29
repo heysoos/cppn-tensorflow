@@ -5,30 +5,9 @@ from os import path, makedirs
 from datetime import datetime
 import imageio
 import matplotlib.pyplot as plt
-from multiprocessing import Process, Pool
+import json
+from multiprocessing import Pool
 
-# seed = 12345678
-# np.random.seed(seed=seed)
-#
-# # net_size = C_n * exp( mu * l / total_neurons) * (alpha + sin(-w*l)
-#
-#
-# total_neurons = [50, 250, 500]
-# num_layers = [3, 5, 10]
-# omega = [0, 0.5, 1, 1.5]  # sinusoidal frequency (affects bottleneck shape and frequency)
-# alpha = [2, 5, 10]  # constant factor that controls the amplitude of the sinusoid (>2)
-# mu = [0, 0.2, 0.5, 1]  # exp. decay rate
-#
-# params = [total_neurons, num_layers, omega, alpha, mu]
-# params = list(itertools.product(*params))
-#
-# for param_args in params:
-#     net_size = sampler.generate_architecture(*param_args)
-#     l = np.arange(1, param_args[1]+1)
-#     plt.plot(l, np.log10(net_size), alpha=0.2)
-#     # print(np.sum(net_size))
-#
-# plt.show()
 
 def generate_params():
     # total_neurons = [50, 250, 500]
@@ -37,21 +16,38 @@ def generate_params():
     # alpha = [2, 5, 10]  # constant factor that controls the amplitude of the sinusoid (>2)
     # mu = [0, 0.2, 0.5, 1]  # exp. decay rate
 
-    total_neurons = [100, 250, 500]
-    num_layers = [3, 5, 10]
-    omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
-    alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
-    mu = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]  # exp. decay rate
+    # total_neurons = [100, 250, 500]
+    # num_layers = [3, 5, 10]
+    # omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    # alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
+    # mu = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]  # exp. decay rate
+
+    total_neurons = [100]
+    num_layers = [3]
+    omega = [-2, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    alpha = [2]  # constant factor that controls the amplitude of the sinusoid (>2)
+    mu = [0.5]  # exp. decay rate
 
     params = [total_neurons, num_layers, omega, alpha, mu]
     params = list(itertools.product(*params))
+
     # params = [list(tup) for tup in list(itertools.product(*params))]
 
     return params
 
+def plot_architecture_samples(params):
+    alpha = 0.1
+    for param in params:
+        net_size = sampler.generate_architecture(*param)
+        plt.plot(np.log10(net_size), alpha=alpha)
+
+    plt.show()
+
+
 
 def generate_images(total_neurons, num_layers, omega, alpha, mu):
     net_size = sampler.generate_architecture(total_neurons, num_layers, omega, alpha, mu)
+
     seed = 0
     # TODO: fix img_null nonesense...
     # GENERATE SAMPLER/ARCHITECTURE
@@ -59,11 +55,12 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
                   num_layers=num_layers, c_dim=3, seed=seed, img=None)
 
     num_images_per_architecture = 5
+    folder = 'save/img_architectures/'
     for i in range(num_images_per_architecture):
         # GENERATE IMAGES
         if i is not 0:
             img_sampler.reinit()
-        z2 = img_sampler.generate_z()[0]
+        z = img_sampler.generate_z()[0]
         img = None
 
         z_scale = 1
@@ -72,25 +69,45 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
         z_factor = np.random.normal(size=16) * z_scale  # mostly used for music
 
         sortidx = np.argsort(np.abs(z_factor))
-        sortidy = np.argsort(np.abs(z2[0]))
+        sortidy = np.argsort(np.abs(z[0]))
 
         z_factor = z_factor[sortidx]
-        z2 = z2[sortidy]
-        zz = z2 * z_factor
+        z = z[sortidy]
+        zz = z * z_factor
 
         f_params = [0, 0, 0, 0, 0]
 
+        ########################### GENERATE IMAGE ###########################
         img_data = img_sampler.generate(zz, x_dim=512, y_dim=512, scale=scale,
                                     f_params=f_params, img=img)
+        ######################################################################
 
-        # time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
-        params_str = 'N{}_L{}_w{}_a{}_m{}_'.format(total_neurons, num_layers, omega, alpha, mu)
-        folder = 'save/img_architectures/'
+        params_str = '/N{}_L{}_w{}_a{}_m{}_'.format(total_neurons, num_layers, omega, alpha, mu)
+
+        folder_json = path.join(folder, 'json')
         if not path.exists(folder):
             makedirs(folder)
-        # figname = folder + time + '.png'
+
+        if not path.exists(folder_json):
+            makedirs(folder_json)
+
+        data = {
+            'net_size': net_size.tolist(),
+            'total_neurons': total_neurons,
+            'num_layers': num_layers,
+            'omega': omega,
+            'alpha': alpha,
+            'mu': mu,
+            'seed': seed,
+            'f_params': f_params,
+            'zz': zz.tolist()
+        }
         figname = folder + params_str + str(i).zfill(2) + '.png'
+        figname_json = folder_json + params_str + str(i).zfill(2) + '.json'
+
         imageio.imwrite(figname, (img_data * 255).astype(np.uint8), format='png')
+        sampler.saveJSON(data=data, filename=figname_json)
+
     img_sampler.cppn.close()  # necessary?!
 
 
@@ -116,16 +133,17 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
 
 
 if __name__ == "__main__":
+
+    # save folder
+    time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
+    folder = path.join('save/img_architectures', time)
+
     params = generate_params()
+
+    # plot_architecture_samples(params)
 
     pool = Pool(processes=11)
     pool.starmap(generate_images, params)
 
-    # total_neurons = 250
-    # num_layers = 20
-    # omega = 0.5
-    # alpha = 2
-    # mu = 0
-    #
-    # net_size = sampler.generate_architecture(total_neurons, num_layers, omega, alpha, mu)
+
 

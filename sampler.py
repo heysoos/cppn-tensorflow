@@ -638,15 +638,15 @@ class Sampler():
 
 
     # TODO: save NN weight data (maybe use JSON only for the other params?)
-    def saveJSON(self, data, filename):
-        with open(filename, 'w') as outfile:
-            outfile.write(json.dumps(data, indent=4, sort_keys=True))
+def saveJSON(data, filename):
+    with open(filename, 'w') as outfile:
+        outfile.write(json.dumps(data, indent=4, sort_keys=True))
 
-    def loadJSON(self, filename):
-        with open(filename) as json_file:
-            data = json.load(json_file)
+def loadJSON(filename):
+    with open(filename) as json_file:
+        data = json.load(json_file)
 
-        return data
+    return data
 
 def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
 
