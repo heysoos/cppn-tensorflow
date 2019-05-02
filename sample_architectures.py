@@ -9,7 +9,7 @@ import json
 from multiprocessing import Pool
 
 
-def generate_params():
+def generate_params(folder):
     # total_neurons = [50, 250, 500]
     # num_layers = [3, 5, 10]
     # omega = [0, 0.5, 1, 1.5]  # sinusoidal frequency (affects bottleneck shape and frequency)
@@ -24,12 +24,15 @@ def generate_params():
 
     total_neurons = [100]
     num_layers = [3]
-    omega = [-2, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
     alpha = [2]  # constant factor that controls the amplitude of the sinusoid (>2)
-    mu = [0.5]  # exp. decay rate
+    mu = [-1, -0.5, 0, 0.5, 1]  # exp. decay rate
 
     params = [total_neurons, num_layers, omega, alpha, mu]
     params = list(itertools.product(*params))
+
+    for i, param in enumerate(params):
+        params[i] = params[i] + (folder,)
 
     # params = [list(tup) for tup in list(itertools.product(*params))]
 
@@ -45,7 +48,7 @@ def plot_architecture_samples(params):
 
 
 
-def generate_images(total_neurons, num_layers, omega, alpha, mu):
+def generate_images(total_neurons, num_layers, omega, alpha, mu, folder):
     net_size = sampler.generate_architecture(total_neurons, num_layers, omega, alpha, mu)
 
     seed = 0
@@ -55,7 +58,7 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
                   num_layers=num_layers, c_dim=3, seed=seed, img=None)
 
     num_images_per_architecture = 5
-    folder = 'save/img_architectures/'
+    # folder = 'save/img_architectures/'
     for i in range(num_images_per_architecture):
         # GENERATE IMAGES
         if i is not 0:
@@ -100,7 +103,8 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu):
             'mu': mu,
             'seed': seed,
             'f_params': f_params,
-            'zz': zz.tolist()
+            'zz': zz.tolist(),
+            'iteration': i
         }
         figname = folder + params_str + str(i).zfill(2) + '.png'
         figname_json = folder_json + params_str + str(i).zfill(2) + '.json'
@@ -138,7 +142,7 @@ if __name__ == "__main__":
     time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
     folder = path.join('save/img_architectures', time)
 
-    params = generate_params()
+    params = generate_params(folder)
 
     # plot_architecture_samples(params)
 
