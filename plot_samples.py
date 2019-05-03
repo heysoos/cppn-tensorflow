@@ -78,14 +78,9 @@ def plot_samples(filters, img_folder=None):
 
     plt.style.use('seaborn-dark')
     plt.rcParams['font.size'] = 5
-    # plt.rcParams['axes.labelsize'] = 10
-    plt.rcParams['axes.labelweight'] = 'bold'
-    # plt.rcParams['axes.titlesize'] = 10
-    # plt.rcParams['xtick.labelsize'] = 8
-    # plt.rcParams['ytick.labelsize'] = 8
     plt.rcParams['figure.titlesize'] = 12
     plt.rcParams['text.usetex'] = True
-    plt.rcParams['text.latex.unicode'] = True
+    # plt.rcParams['text.latex.unicode'] = True
 
     latex_dict = {
             'total_neurons': 'N',
@@ -154,7 +149,7 @@ def plot_samples(filters, img_folder=None):
 
             # plot network axis labels on the last row
             if (i / ncols) == (nrows - 1):
-                axi.set_ylabel(' of Neurons')
+                axi.set_ylabel('\# of Neurons')
                 axi.set_xlabel('Net Size')
 
         else:
@@ -166,16 +161,17 @@ def plot_samples(filters, img_folder=None):
         if i < ncols and i > 0:
             axi.set_title(str(i % ncols))
 
+    # plt.tight_layout()
     plt.show()
 
 
 if __name__ == '__main__':
 
-    N = 100  # total_neurons
-    L = 3  # num layers
-    omega = -2  # omega
+    N = 500  # total_neurons
+    L = None  # num layers
+    omega = 0 # omega
     alpha = 2  # alpha
-    mu = None  # mu
+    mu = 0 # mu
 
     filters = {
         'total_neurons': N,
@@ -185,7 +181,7 @@ if __name__ == '__main__':
         'mu': mu,
     }
 
-    img_folder = '19-04-30-19-20-18.898760'
+    img_folder = '19-05-03-13-55-28.286896'
 
     plot_samples(filters, img_folder)
 

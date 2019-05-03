@@ -16,17 +16,17 @@ def generate_params(folder):
     # alpha = [2, 5, 10]  # constant factor that controls the amplitude of the sinusoid (>2)
     # mu = [0, 0.2, 0.5, 1]  # exp. decay rate
 
-    # total_neurons = [100, 250, 500]
-    # num_layers = [3, 5, 10]
-    # omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
-    # alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
-    # mu = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]  # exp. decay rate
-
-    total_neurons = [100]
-    num_layers = [3]
+    total_neurons = [100, 250, 500]
+    num_layers = [3, 5, 10]
     omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
-    alpha = [2]  # constant factor that controls the amplitude of the sinusoid (>2)
-    mu = [-1, -0.5, 0, 0.5, 1]  # exp. decay rate
+    alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
+    mu = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]  # exp. decay rate
+
+    # total_neurons = [100]
+    # num_layers = [3]
+    # omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    # alpha = [2]  # constant factor that controls the amplitude of the sinusoid (>2)
+    # mu = [0]  # exp. decay rate
 
     params = [total_neurons, num_layers, omega, alpha, mu]
     params = list(itertools.product(*params))
@@ -41,8 +41,8 @@ def generate_params(folder):
 def plot_architecture_samples(params):
     alpha = 0.1
     for param in params:
-        net_size = sampler.generate_architecture(*param)
-        plt.plot(np.log10(net_size), alpha=alpha)
+        net_size = sampler.generate_architecture(*param[:-1])
+        plt.plot(net_size, alpha=alpha)
 
     plt.show()
 
