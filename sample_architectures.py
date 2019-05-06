@@ -49,6 +49,7 @@ def plot_architecture_samples(params):
 
 
 def generate_images(total_neurons, num_layers, omega, alpha, mu, folder):
+    use_z = False
     net_size = sampler.generate_architecture(total_neurons, num_layers, omega, alpha, mu)
 
     seed = 0
@@ -57,27 +58,37 @@ def generate_images(total_neurons, num_layers, omega, alpha, mu, folder):
     img_sampler = sampler.Sampler(z_dim=16, scale=8, net_size=net_size,
                   num_layers=num_layers, c_dim=3, seed=seed, img=None)
 
-    num_images_per_architecture = 5
+    num_images_per_architecture = 20
     # folder = 'save/img_architectures/'
     for i in range(num_images_per_architecture):
         # GENERATE IMAGES
         if i is not 0:
             img_sampler.reinit()
-        z = img_sampler.generate_z()[0]
+
+        if use_z:
+            # generates a new latent vector z for each initialization.
+
+            z = img_sampler.generate_z()[0]
+
+            z_scale = 1
+            # z_scale = np.random.uniform(1, 3)
+            z_factor = np.random.normal(size=16) * z_scale  # mostly used for music
+
+            sortidx = np.argsort(np.abs(z_factor))
+            sortidy = np.argsort(np.abs(z[0]))
+
+            z_factor = z_factor[sortidx]
+            z = z[sortidy]
+            zz = z * z_factor
+
+        else:
+            # set the latent vector to 0
+            z_scale = 0
+            zz = img_sampler.generate_z()[0] * z_scale
+
+        scale = 1
+        # scale = np.random.uniform(0.5, 3)
         img = None
-
-        z_scale = 1
-        scale = np.random.uniform(0.5, 3)
-        # z_scale = np.random.uniform(1, 3)
-        z_factor = np.random.normal(size=16) * z_scale  # mostly used for music
-
-        sortidx = np.argsort(np.abs(z_factor))
-        sortidy = np.argsort(np.abs(z[0]))
-
-        z_factor = z_factor[sortidx]
-        z = z[sortidy]
-        zz = z * z_factor
-
         f_params = [0, 0, 0, 0, 0]
 
         ########################### GENERATE IMAGE ###########################
