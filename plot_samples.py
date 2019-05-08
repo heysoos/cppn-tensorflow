@@ -92,7 +92,7 @@ def plot_samples(filters, img_folder=None):
 
     # img_params = {x.replace(f, '') for x in img_list for f in filters}
 
-    numImgs = 5  # number of images per architecture initialization
+    numImgs = 40  # number of images per architecture initialization
     ncols = numImgs + 1  # added one extra column to also plot net_size
     nrows = int(len(imgs) / numImgs)
 
@@ -167,11 +167,11 @@ def plot_samples(filters, img_folder=None):
 
 if __name__ == '__main__':
 
-    N = 500  # total_neurons
+    N = 250  # total_neurons
     L = None  # num layers
-    omega = 0 # omega
+    omega = 2 # omega
     alpha = 2  # alpha
-    mu = 0 # mu
+    mu = 0.1 # mu
 
     filters = {
         'total_neurons': N,
@@ -181,7 +181,7 @@ if __name__ == '__main__':
         'mu': mu,
     }
 
-    img_folder = '19-05-03-13-55-28.286896'
+    img_folder = '19-05-06-20-15-32.049534'
 
     plot_samples(filters, img_folder)
 

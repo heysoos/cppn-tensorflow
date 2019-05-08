@@ -1,7 +1,8 @@
 import numpy as np
 import os
 from PIL import Image
-from matplotlib.pylab import plt
+import matplotlib.pyplot as plt
+from matplotlib import colors
 
 def correlation_distance(imgs_list, dmin, dmax, N):
     # Calculate correlation function (correlation as a function of distance).
@@ -131,30 +132,47 @@ if __name__ == '__main__':
     # set filters to None to load all images
     N = 500  # total_neurons
     L = 3  # num layers
-    omega = 0  # omega
+    omega = 2  # omega
     alpha = 2  # alpha
     mu = 1  # mu
 
-    filters = {
-        'total_neurons': N,
-        'num_layers': L,
-        'omega': omega,
-        'alpha': alpha,
-        'mu': mu,
-    }
 
-    img_folder = '19-05-03-13-55-28.286896'
+    alpha_plot = 1
+    s = 2
 
-    imgs_list = load_image_directories(filters, img_folder)
+    Ns = [100, 250, 500]
+    # Ls = [3, 5, 10]
+    # mus = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]
 
-    dmin = 1
-    dmax = 300
-    N = 10000
+    cmap = plt.get_cmap('tab10')
+    norm = colors.Normalize(vmin=0, vmax=len(Ns))  # age/color mapping
 
-    corr_d = correlation_distance(imgs_list, dmin, dmax, N)
+    for ii, N in enumerate(Ns):
+        filters = {
+            'total_neurons': N,
+            'num_layers': L,
+            'omega': omega,
+            'alpha': alpha,
+            'mu': mu,
+        }
 
-    d = np.arange(dmin, dmax)
-    for corr in corr_d:
-        plt.plot(d, corr)
+        img_folder = '19-05-06-20-15-32.049534'
 
+        imgs_list = load_image_directories(filters, img_folder)
+
+        dmin = 1
+        dmax = 300
+        N_samples = 10000
+
+        corr_d = correlation_distance(imgs_list, dmin, dmax, N_samples)
+        c = cmap(norm(ii))
+        d = np.arange(dmin, dmax)
+
+        plt.plot(d, np.mean(corr_d, axis=0), color=c, label=str(N))
+
+        # for corr in corr_d:
+        #     plt.scatter(d, corr, color=c, alpha=alpha_plot, s=s, label=str(mu))
+    # plt.yscale('log')
+    # plt.xscale('linear')
+    plt.legend()
     plt.show()
