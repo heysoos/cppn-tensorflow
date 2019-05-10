@@ -49,7 +49,7 @@ def architecture_correlation_means(img_folder, filter_keys):
 
 
         # sort so similar params are together, with iteration number as well
-        sort_keys = filter_keys
+        sort_keys = filter_keys[:]
         sort_keys.append('iteration')
 
         sort_list = [tuple((img_params[k]) for k in sort_keys) for img_params in imgs_params]
@@ -65,9 +65,9 @@ def architecture_correlation_means(img_folder, filter_keys):
         for corr_path in corrs_paths:
             with open(corr_path, 'rb') as fp:
                 corrs.append(pickle.load(fp))
-
+        corrs = np.nan_to_num(corrs)
         # calculate correlation means
-        corrs_means = [ np.mean(corrs[i:i + max_iters + 1], axis=0)
+        corrs_means = [ np.nanmean(corrs[i:i + max_iters + 1], axis=0)
                         for i in range(0, len(corrs), max_iters + 1)]
 
         # gather img params after removing redundancy in iterations
@@ -97,9 +97,7 @@ def architecture_correlation_means(img_folder, filter_keys):
 #
 #
 #
-def plot_correlations_all(corrs_means, means_params, highlight):
-
-    values = list(np.sort(np.unique([v[highlight] for v in means_params])))
+def plot_correlations_all(corrs_means, means_params, filter_keys):
 
     plt.style.use('seaborn-dark')
     plt.rcParams['font.size'] = 10
@@ -115,32 +113,48 @@ def plot_correlations_all(corrs_means, means_params, highlight):
     }
 
     cmap = plt.get_cmap('gnuplot')
-    norm = colors.Normalize(vmin=0, vmax=len(values))  # age/color mapping
 
-    fig, ax = plt.subplots(dpi=150)
-    ax.set_title('Correlation Function of CPPN Images')
-    ax.set_xlabel('Distance')
-    ax.set_ylabel('r')
-
-    for i, corr in enumerate(corrs_means):
-        corr_value = means_params[i][highlight]
-        c = cmap(norm( values.index(corr_value) ))
-
-        label = '$' + latex_dict[highlight] + ': ' + str(corr_value) + '$'
+    fig, ax = plt.subplots(ncols=len(filter_keys), figsize=(15,6), dpi=100,
+                           sharex=True, sharey=True, constrained_layout=True)
+    fig.suptitle('Correlation Function of CPPN Images')
+    # plt.xlabel('Distance')
+    fig.text(0.5, 0.04, 'Distance', ha='center', va='center')
 
 
-        ax.plot(np.arange(0, len(corr)), corr, alpha=0.1, linewidth=1, c=c, label=label)
+    for ii, highlight in enumerate(filter_keys):
 
-    handles, labels = unique_labels(ax)
+        values = list(np.sort(np.unique([v[highlight] for v in means_params])))
+        norm = colors.Normalize(vmin=0, vmax=len(values))  # age/color mapping
 
-    leg = ax.legend(handles, labels)  # draw the legend with the filtered handles and labels lists
-    for h in leg.legendHandles:
-        h.set_alpha(1)
+        if ii == 0:
+            ax[ii].set_ylabel('r')
+        # fig.set_xlabel('Distance')
+        # fig.set_ylabel('r')
 
-    # plt.yscale('log')
-    # plt.xscale('log')
+        for i, corr in enumerate(corrs_means):
+            corr_value = means_params[i][highlight]
+            c = cmap(norm( values.index(corr_value) ))
 
-    plt.show()
+            label = '$' + latex_dict[highlight] + ': ' + str(corr_value) + '$'
+
+
+            ax[ii].plot(np.arange(0, len(corr)), corr, alpha=0.1, linewidth=1, c=c, label=label)
+
+        handles, labels = unique_labels(ax[ii])
+
+        leg = ax[ii].legend(handles, labels)  # draw the legend with the filtered handles and labels lists
+        for h in leg.legendHandles:
+            h.set_alpha(1)
+        xmax, xmin = ax[ii].get_xlim()
+        ymax, ymin = ax[ii].get_ylim()
+        ax[ii].set_aspect(np.max(xmax-xmin)/(ymax-ymin))
+        ax[ii].set_axisbelow(True)
+        ax[ii].minorticks_on()
+        ax[ii].grid(which='major', linestyle='-', color='black', alpha=0.1)
+        ax[ii].grid(which='minor', linestyle=':', color='black', alpha=0.1)
+
+        # plt.yscale('log')
+        # plt.xscale('log')
 
 def unique_labels(ax):
     handles, labels = ax.get_legend_handles_labels()  # get existing legend item handles and labels
@@ -158,7 +172,12 @@ def unique_labels(ax):
     return handles, labels
 
 
+
+
 if __name__ == '__main__':
+
+    img_folder = 'big'
+
     filter_keys = [
         'total_neurons',
         'num_layers',
@@ -167,12 +186,28 @@ if __name__ == '__main__':
         'mu'
     ]
 
-    img_folder = 'big'
-
     corrs_means, means_params = architecture_correlation_means(img_folder, filter_keys)
 
-    highlight = 'total_neurons'
 
-    plot_correlations_all(corrs_means, means_params, highlight)
+    ########## ONE FIGURE ##########
+    # highlight = 'total_neurons'
+    # plot_correlations_all(corrs_means, means_params, highlight)
+    # plt.show()
+    ################################
+
+    # ## All FIGURES ##
+    # for highlight in filter_keys:
+    #     plot_correlations_all(corrs_means, means_params, highlight)
+    # plt.show()
+    # ################################
+    #
+    #
+    #### ALL FIGURES IN SUBPLOT ####
+    plot_correlations_all(corrs_means, means_params, filter_keys)
+    plt.show()
+    ################################
+    #
+    #
+
 
 
