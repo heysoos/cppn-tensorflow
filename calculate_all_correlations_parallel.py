@@ -3,6 +3,7 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 from PIL import Image
+import scipy.signal
 # import pathos.multiprocessing as mp
 # import tqdm
 # import pathos
@@ -34,6 +35,31 @@ def correlation_distance(img_path, dmin, dmax, N):
         corr_d_img.append(corr)
 
     return corr_d_img
+
+def fft_autocorr(img_path, method='fft'):
+
+
+    img = np.array(Image.open(img_path).convert('L')) / 255
+
+    img_mean = np.mean(np.mean(img))  # calculate mean
+    img = img - img_mean  # subtract mean
+
+    if method == 'fft_windowed':
+        # apply hanning window function
+        h = np.outer( np.hanning(len(img)), np.hanning(len(img)) )
+        img = img * h
+
+    img_squared_mean = np.mean(np.mean(img**2))
+
+    nm = np.product(np.shape(img))
+
+    corr = scipy.signal.fftconvolve(img, img[::-1, ::-1]) / nm / img_squared_mean
+
+
+    shape = np.shape(corr)
+    iu = np.triu_indices(n=shape[0], m=shape[1])
+
+    return corr[iu]
 
 
 def load_image_directories(img_folder=None):
@@ -86,11 +112,11 @@ def random_walk(x1, y1, d, res):
 
     return x2, y2
 
-def generate_params(img_folder, corr_folder, dmin, dmax, N):
+def generate_params(method, img_folder, corr_folder, dmin=None, dmax=None, N=None):
 
     img_paths = load_image_directories(img_folder)
 
-    params = [ (img_path, corr_folder, dmin, dmax, N) for img_path in img_paths ]
+    params = [ (method, img_path, corr_folder, dmin, dmax, N) for img_path in img_paths ]
 
     return params
 
@@ -100,9 +126,29 @@ def show_image(img_dir):
     plt.imshow(img)
     plt.show()
 
-def calc_and_save_corrs(img_path, corr_folder, dmin, dmax, N):
+def dist_vec(shape):
+    n = shape[0]
+    m = shape[1]
+    iu = np.triu_indices(n=n, m=m, k=0)
 
-    corr = correlation_distance(img_path, dmin, dmax, N)
+    distu = np.sqrt((iu[0] - (n-1)/2)**2 + (iu[1] - (m-1)/2)**2)
+
+    return distu
+
+
+def calc_and_save_corrs(method, img_path, corr_folder, dmin=None, dmax=None, N=None):
+
+    if method == 'sample':
+        corr = correlation_distance(img_path, dmin, dmax, N)
+    elif method == 'fft' or method == 'fft_windowed':
+        corr =  fft_autocorr(img_path, method)
+    # elif method == 'full':
+        # corr = ...
+        #  TODO: full sampling
+
+    else:
+        raise Exception('Method must be either \'fft\' or \'sample\'.')
+
     new_base = os.path.splitext(os.path.basename(img_path))[0] + '.txt'
     savename = os.path.join(corr_folder, new_base)
 
@@ -115,18 +161,22 @@ def calc_and_save_corrs(img_path, corr_folder, dmin, dmax, N):
 
 if __name__ == '__main__':
 
-    dmin = 1  # minimum distance
-    dmax = 300  # maximum distance (be careful making this too large, can get stuck in while loops!)
-    N = int(1e5)  # 10 000 samples per distance
+    method = 'fft_windowed'  # 'sample', 'fft', 'fft_windowed',  'full'
+
+    if method == 'sample':
+        dmin = 1  # minimum distance
+        dmax = 300  # maximum distance (be careful making this too large, can get stuck in while loops!)
+        N = int(1e5)  # 10 000 samples per distance
 
     # img_folder = '19-05-06-20-15-32.049534'
-    img_folder = 'test'
-    corr_folder = os.path.join('save/img_architectures/', img_folder, 'corrs')
+    img_folder = 'big'
+    corr_folder = os.path.join('save/img_architectures/', img_folder, 'corrs', method)
 
     if not os.path.exists(corr_folder):
         os.makedirs(corr_folder)
 
-    params = generate_params(img_folder, corr_folder, dmin, dmax, N)
+    # params = generate_params(method, img_folder, corr_folder, dmin, dmax, N)
+    params = generate_params(method, img_folder, corr_folder)
 
     ## MULTIPROCESSING EXPERIMENTS ##
 

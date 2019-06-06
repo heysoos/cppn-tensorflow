@@ -20,6 +20,8 @@ def correlation_distance(imgs_list, dmin, dmax, N):
     corr_d = []
     for img_dir in imgs_list:
         img = np.array(Image.open(img_dir).convert('L')).flatten()
+
+        # TODO: if image is not flattened, need to change how resolution (res) follows through
         res = np.sqrt(img.shape[0])  # img should be square...
         corr_d_img = []
 
@@ -87,11 +89,14 @@ def load_image_directories(filters, img_folder=None):
 
 
 def find_N_pairs(d, N, res):
+    # generate random coordinates in 2D space
     x1 = np.random.randint(0, res, N)
     y1 = np.random.randint(0, res, N)
 
+    # convert to img-flattened index
     p = x1 * res + y1
 
+    # use random walk to find points distance d away
     x2, y2 = random_walk(x1, y1, d, res)
 
     q = x2 * res + y2

@@ -91,8 +91,16 @@ def plot_samples(filters, img_folder=None):
     }
 
     # img_params = {x.replace(f, '') for x in img_list for f in filters}
+    max_iters = np.max([p['iteration'] for p in imgs_params]) + 1
+    numImgs = 5  # number of images per architecture initialization
 
-    numImgs = 40  # number of images per architecture initialization
+    # keep only the number of images that we desire to plot that are in the same architecture
+    totalImgs = len(imgs)
+    imgs = [imgs[ii] for i in range(0, totalImgs, max_iters)
+            for ii in range(i, i + numImgs) ]
+    imgs_params = [imgs_params[ii] for i in range(0, totalImgs, max_iters)
+                   for ii in range(i, i + numImgs) ]
+
     ncols = numImgs + 1  # added one extra column to also plot net_size
     nrows = int(len(imgs) / numImgs)
 
@@ -156,6 +164,8 @@ def plot_samples(filters, img_folder=None):
             axi.imshow(imgs[img_counter])
             axi.set_xticks([])
             axi.set_yticks([])
+
+
             img_counter += 1
 
         if i < ncols and i > 0:
@@ -167,11 +177,20 @@ def plot_samples(filters, img_folder=None):
 
 if __name__ == '__main__':
 
-    N = 250  # total_neurons
-    L = None  # num layers
-    omega = 2 # omega
-    alpha = 2  # alpha
-    mu = 0.1 # mu
+    N = 100  # total_neurons
+    L = 10  # num layers
+    omega = -1  # omega
+    alpha = None  # alpha
+    mu = 0.1  # mu
+
+    ###### ARCHITECTURE SAMPLES #######
+    # total_neurons = [100, 250, 500]
+    # num_layers = [3, 5, 10]
+    # omega = [-2, -1, -0.5, 0, 0.5, 1, 2]  # sinusoidal frequency (affects bottleneck shape and frequency)
+    # alpha = [2, 5]  # constant factor that controls the amplitude of the sinusoid (>2)
+    # mu = [0, 0.1, -0.1, 0.5, -0.5, 1, -1]  # exp. decay rate
+
+
 
     filters = {
         'total_neurons': N,
@@ -181,7 +200,8 @@ if __name__ == '__main__':
         'mu': mu,
     }
 
-    img_folder = '19-05-06-20-15-32.049534'
+    # img_folder = '19-05-03-13-55-28.286896'
+    img_folder = 'big'
 
     plot_samples(filters, img_folder)
 
