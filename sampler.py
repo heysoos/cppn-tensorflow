@@ -72,27 +72,29 @@ class Sampler():
         return z
 
 
-    def generate(self, z=None, x_dim=512, y_dim=512, scale=10.0, f_params=None, img=None):
+    def generate(self, z=None, x_dim=512, y_dim=512, scale=10.0, seed=0,
+                 f_params=None, img=None):
         if z is None:
             z = self.generate_z()
         else:
             z = np.reshape(z, (1, self.cppn.z_dim))
         self.z = z
-        return self.cppn.generate(z, x_dim, y_dim, scale, f_params, img=img)[0]
+        return self.cppn.generate(z=z, x_dim=x_dim, y_dim=y_dim, scale=scale, seed=seed,
+                                  f_params=f_params, img=img)[0]
 
-    def generate_hires(self, z, res=512, x_res_factor=2, y_res_factor=2, scale=8.0,
+    def generate_hires(self, z, res=512, x_res_factor=2, y_res_factor=2, scale=8.0, seed=0,
                        f_params=None, img=None):
         self.z = z
-        return self.cppn.generate_hires(z, res=res, x_res_factor=x_res_factor, y_res_factor=x_res_factor, scale=scale,
-                                        f_params=f_params, img=img)
+        return self.cppn.generate_hires(z, res=res, x_res_factor=x_res_factor, y_res_factor=y_res_factor, scale=scale,
+                                        seed=seed, f_params=f_params, img=img)
 
-    def get_image(filepath):
-        imageio.imread(filepath)
-        #TODO: check color/size
-        return img
+    # def get_image(filepath):
+    #     imageio.imread(filepath)
+    #     #TODO: check color/size
+    #     return img
 
 
-    def show_image(self, image_data):
+    def show_image(self, image_data, method='rgb'):
         '''
         image_data is a tensor, in [height width depth]
         image_data is NOT the PIL.Image class
@@ -102,12 +104,36 @@ class Sampler():
         x_dim = image_data.shape[1]
         c_dim = self.cppn.c_dim
         if c_dim > 1:
+            image_data = self.image2rgb(image_data, method)
+
             ax.imshow(image_data, interpolation='nearest')
         else:
             ax.imshow(image_data.reshape(y_dim, x_dim), cmap='Greys', interpolation='nearest')
+
         plt.axis('off')
         ax.set_aspect('equal', 'box')
         plt.show()
+
+    def image2rgb(self, image_data, method):
+        c_dim = self.cppn.c_dim
+        if c_dim == 4:
+            image_data = rgba2rgb(image_data)
+        elif method == 'hsv':
+            image_data = hsv2rgb(image_data)
+        elif method == 'xyz':
+            image_data = xyz2rgb(image_data)
+        elif method == 'yuv':
+            image_data = self.normalize_img(yuv2rgb(image_data))
+        elif method == 'YPbPr':
+            image_data = self.normalize_img(ypbpr2rgb(image_data))
+        elif method == 'YDbDr':
+            image_data = self.normalize_img(ydbdr2rgb(image_data))
+        # if method == 'rgb' do nothing
+
+        return image_data
+
+    def normalize_img(self, img):
+        return (img - np.min(img)) / (np.max(img) - np.min(img))
 
 
     def save_png(self, image_data, filename):
@@ -141,6 +167,43 @@ class Sampler():
             img_data = np.array(img_data.reshape((y_dim, x_dim)) * 255.0, dtype=np.uint8)
         im = Image.fromarray(img_data)
         return im
+
+    def save_hires_png_seq(self, z1, r, n_frame=10, res=512, x_res_factor=2, y_res_factor=2,
+                           scale=1.0, seed=0, f_params=None, img=None, method='rgb'):
+        '''
+        this saves a hi-res png sequence by rotating 360 from latent vector z1 back to itself.
+        r: radius of rotation
+        n_frame: number of states in between z1 and z2 morphing effect, exclusive of z1 and z2
+        '''
+
+
+        time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
+        folder = 'save/png_seq/' + time
+        if not path.exists(time):
+            makedirs(folder)
+
+        delta_theta = (2 * np.pi) / (n_frame + 1)
+
+        z = deepcopy(z1)
+        total_frames = n_frame + 2
+        for i in range(total_frames):
+            theta = np.tile(delta_theta * float(i), int(np.size(z)/2))
+
+            delta_z1 = r * np.sin(theta)
+            delta_z2 = r * np.cos(theta) - r  #  minus r so that frame 0 starts from initial z img
+
+            delta_z = np.stack([x for t in zip(delta_z1, delta_z2) for x in t])
+
+            z = z1 + delta_z
+
+            image_data = self.generate_hires(z, res, x_res_factor, y_res_factor, scale, seed,
+                                                    f_params, img)
+
+            image_data = (255 * self.image2rgb(image_data, method)).astype(np.uint8)
+            print('processing image ', i)
+            figname = folder + '/' + time + '-' + str(i).zfill(4) + '.png'
+            imageio.imwrite(figname, image_data, format='png')
+
 
 
     def save_anim_gif(self, z1, z2, filename, n_frame=10, duration1=0.5, \
@@ -181,7 +244,7 @@ class Sampler():
 
     def save_wave_anim_gif(self, z1, r, filename, n_frame=10, duration1=0.5, \
                       duration2=1.0, duration=0.1, x_dim=512, y_dim=512, c_dim=1, scale=10.0,
-                      reverse=True, f_params=None, img=None):
+                      reverse=True, f_params=None, img=None, method='rgb'):
         '''
         this saves an animated gif by rotating 360 from latent vector z1 back to itself.
         r: radius of rotation
@@ -213,8 +276,10 @@ class Sampler():
 
             # z = z1 + delta_z * float(i)
             # images.append(self.to_image(self.generate(z, x_dim, y_dim, scale)))
-            images.append((255 * self.generate(z, x_dim, y_dim, scale,
-                                               f_params=f_params, img=img)).astype(np.uint8))
+            image_data = (255 * self.generate(z, x_dim, y_dim, scale,
+                                               f_params=f_params, img=img))
+            image_data = self.image2rgb(image_data, method).astype(np.uint8)
+            images.append(image_data)
             # if self.cppn.c_dim == 1:
             #     images.append(self.generate(z, x_dim, y_dim, scale).reshape(x_dim, y_dim))
             # else:
@@ -237,7 +302,7 @@ class Sampler():
 
     def save_wave_cat_anim_gif(self, z1, r_global, filename, n_frame=10, duration1=0.5, \
                            duration2=1.0, duration=0.1, x_dim=512, y_dim=512, c_dim=1, scale=10.0,
-                           reverse=True, f_params=None, img=None):
+                           reverse=True, f_params=None, img=None, method='rgb'):
         '''
         this saves an animated gif by rotating 360 from latent vector z1 back to itself as a chain of the chained
         'rotations' of each individual latent vector dimension, like a caterpillar
@@ -281,9 +346,10 @@ class Sampler():
             delta_z = np.stack([x for t in zip(delta_z1, delta_z2) for x in t])
 
             z = z1 + delta_z
-
-            images.append((255 * self.generate(z, x_dim, y_dim, scale,
-                                               f_params=f_params, img=img)).astype(np.uint8))
+            image_data = (255 * self.generate(z, x_dim, y_dim, scale,
+                                               f_params=f_params, img=img)).astype(np.uint8)
+            image_data = self.image2rgb(image_data, method)
+            images.append(image_data)
             print('processing image ', i)
         durations = [duration1] + [duration] * n_frame + [duration2]
         if reverse == True:  # go backwards in time back to the first state
@@ -297,48 +363,33 @@ class Sampler():
         imageio.mimsave(filename, images, format='gif', fps=30)
 
 
-    def save_iter_anim_gif(self, z1, filename, n_frame=10, duration1=0.5, \
-                      duration2=1.0, duration=0.1, x_dim=512, y_dim=512, c_dim=1, scale=10.0,
-                      reverse=True, f_params=None, img=None):
+    def save_recursive_anim_png_seq(self, z1, img_initial, img_evo=0.1, n_frame=100,
+                                    x_dim=512, y_dim=512, scale=10.0, f_params=None):
         '''
-        this saves an animated gif by recursively inputing the generated image back into the input params
-        n_frame: number of states in between z1 and z2 morphing effect, exclusive of z1 and z2
-        duration1, duration2, control how long z1 and z2 are shown.  duration controls frame speed, in seconds
-        TODO: doesn't really work
+        this saves a png sequence of images generated by recursively using the generated images as input into the
+        next image. The rate of change of the input image is controlled by the 'img_evo' rate.
+        img_initial: the initial input image
+        img_evo: image evolution rate
         '''
-        print('input image amplitude: f_params[-1] = ', str(f_params[-1]))
-        total_frames = n_frame + 2
-        images = []
-        render = np.zeros((x_dim, y_dim))
-        for i in range(total_frames):
-            # z = z1 + delta_z * float(i)
-            # images.append(self.to_image(self.generate(z, x_dim, y_dim, scale)))
-            render = self.generate(z1, x_dim, y_dim, scale,
-                                               f_params=f_params, img=render)
-            images.append((255 * render).astype(np.uint8))
-            # if self.cppn.c_dim == 1:
-            #     images.append(self.generate(z, x_dim, y_dim, scale).reshape(x_dim, y_dim))
-            # else:
-            #   images.append(self.generate(z, x_dim, y_dim, scale).reshape(x_dim, y_dim, self.cppn.c_dim))
+
+        time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
+        folder = 'save/png_seq/r-' + time
+        if not path.exists(time):
+            makedirs(folder)
+
+        r_img = img_initial  # recursive input image
+        for i in range(n_frame):
+
+            image = self.generate(z1, x_dim, y_dim, scale, f_params=f_params, img=r_img)
+            image_save = (255 * image).astype(np.uint8)
+
+            figname = folder + '/' + time + '-' + str(i).zfill(4) + '.png'
+            imageio.imwrite(figname, image_save, format='png')
             print('processing image ', i)
-        durations = [duration1] + [duration] * n_frame + [duration2]
-        if reverse == True:  # go backwards in time back to the first state
-            revImages = list(images)
-            revImages.reverse()
-            revImages = revImages[1:]
-            images = images + revImages
-            durations = durations + [duration] * n_frame + [duration1]
+            r_img = image
 
-        # images = np.array(images)
-        print('writing gif file...')
-        # imageio.imwrite(filename, images, format='gif', fps=60)
-        imageio.mimsave(filename, images, format='gif', fps=30)
-        # imageio.mimsave(filename, images, format='ffmpeg', fps=30, quality = 10)
-        # writeGif(filename, images, duration = durations)
-
-    def save_music_anim_gif(self, z1, r_global, audiopath, filename, n_frame=10, duration1=0.5, \
-                           duration2=1.0, duration=0.1, x_dim=512, y_dim=512, c_dim=1, scale=10.0,
-                           f_params=None, img=None, acceleration=False, exp_gain=1,
+    def save_music_anim_gif(self, z1, r_global, audiopath, n_frame=10, x_dim=512, y_dim=512, scale=10.0,
+                            f_params=None, img=None, acceleration=False, exp_gain=1,
                             fps=30, w_scaler=2, normalize_w = True, f_amp_w=False):
         '''
         this saves an animated gif by rotating 360 from latent vector z1 back to itself.
@@ -354,7 +405,6 @@ class Sampler():
         delta_z = self.calculate_delta_z(z1, r_global, audiopath, n_frame,
                                     acceleration, exp_gain, fps, w_scaler, normalize_w, f_amp_w)
         total_frames = delta_z.shape[0]
-        images = []
 
         time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
         folder = 'save/png_seq/' + time
@@ -362,12 +412,8 @@ class Sampler():
             makedirs(folder)
 
         for i in range(total_frames):
-            # delta_z1 = r1 * np.sin(theta1[i, :]) - r1/2
-            # delta_z2 = r2 * np.cos(theta2[i, :]) - r2/2
 
-            # delta_z = np.stack([x for t in zip(delta_z1, delta_z2) for x in t])
-
-            z = z1 + delta_z[i,:]
+            z = z1 + delta_z[i, :]
 
             image = (255 * self.generate(z, x_dim, y_dim, scale,
                                                f_params=f_params, img=img)).astype(np.uint8)
@@ -375,10 +421,7 @@ class Sampler():
             figname = folder + '/' + time + '-' + str(i).zfill(4) + '.png'
             imageio.imwrite(figname, image, format='png')
             print('processing image ', i)
-        # durations = [duration1] + [duration] * n_frame + [duration2]
-        # images = np.array(images)
-        # print('writing gif file...')
-        # imageio.mimsave(filename, images, format='gif', fps=fps)
+
 
     def calculate_delta_z(self, z1, r_global, audiopath, n_frame=10,
                           acceleration=False, exp_gain=1, fps=30, w_scaler=2, normalize_w=True, f_amp_w=False):
@@ -673,73 +716,6 @@ def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
         # print(net_size)
 
         return net_size
-# imgs = []
-# x_dim = 512
-# y_dim = 512
-# scale = 10
-# net_size = [128, 64, 32, 16, 8, 4]
-# num_layers = 6
-# c_dim = 1
-#
-# # filename = '../pyramids.png'
-# # img = imageio.imread(filename)
-# null_img = np.zeros((x_dim, y_dim))
-#
-# sampler = Sampler(z_dim=8, scale=scale, net_size=net_size, c_dim=c_dim, num_layers=num_layers, img=null_img)
-# f_params = [0, 0, 0, 0, 10]
-#
-# time = datetime.now().strftime("%y-%b-%d-%H-%M-%S.%f")
-# figname = 'save/' + time + '.gif'
-# z = sampler.generate_z()
-#
-# render = sampler.generate(
-#     z=z, x_dim=x_dim, y_dim=y_dim, scale=scale, f_params=f_params, img=null_img)
-# sampler.show_image(render)
-#
-# for i in range(9):
-#     render = sampler.generate(
-#         z=z, x_dim=x_dim, y_dim=y_dim, scale=scale, f_params=f_params, img=render)
-#     imgs.append(render)
-#
-#
-# fig, ax = plt.subplots(3, 3)
-#
-# counter = 0
-# for ix in range(3):
-#     for iy in range(3):
-#         ax[ix, iy].imshow(imgs[counter][:,:,0])
-#         counter += 1
-
-# plt.show()
-# for i in range(len(imgs)):
-#     sampler.show_image(imgs[i])
-
-# sampler.save_iter_anim_gif(z, figname,
-#                       x_dim = 640, y_dim = 640, scale=1, f_params=f_params,
-#                       n_frame=240, reverse=False, img=None)
-
-
-
-# for i in range(5):
-#     sampler.reinit()
-#     z = sampler.generate_z()
-#     # f_params = sampler.generate_f_params()
-#
-#     imgs.append(sampler.generate(
-#         z=z, x_dim=x_dim, y_dim=y_dim, scale=scale, f_params=f_params, img=img))
-#
-# for i in range(len(imgs)):
-#     sampler.show_image(imgs[i])
-
-# time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
-# figname = 'save/' + time + '.gif'
-# sampler.save_anim_gif(z1, z2, figname, n_frame=2, reverse=False)
-
-# img_data = sampler.generate(z1)
-# sampler.show_image(img_data)
-
-# sampler.reinit()
-# sampler.show_image(sampler.generate(z1))
 
 
 ########### MUSIC TESTS ##################
@@ -808,12 +784,13 @@ def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
 
 ############ HIRES IMAGES ##################
 # net_size = [32, 32, 32, 16, 16, 16, 8, 8, 8, 4, 4, 4]
-# num_layers = 6
+# num_layers = len(net_size)
 # c_dim = 3
-# img_null = tf.zeros((640, 640))
+# img_null = np.zeros((640, 640))
+#
 # sampler = Sampler(z_dim = 16, scale = 8, net_size = net_size,
 #                   num_layers=num_layers, c_dim=c_dim, img=img_null)
-#
+# img = np.random.random((512, 512))
 # z1 = sampler.generate_z()
 #
 # low = np.random.random()
@@ -822,14 +799,18 @@ def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
 #
 # C = np.random.random()
 # z1 = np.concatenate((C + low * z1[0:4], mid * z1[4:12], high * z1[12:16]))
-# f_params = [1, 0, 0, 0, 0]
+# perlin_params = (1, 0.05, 6, 0.5, 2.0)
+# f_params = [2, 0, perlin_params, 0, 1]
 #
+# pseed=0
+# img_data = sampler.generate(z1, x_dim=512, y_dim=512, scale=0.1, seed=pseed,
+#                             f_params=f_params, img=img)
 #
-# img_data = sampler.generate_hires(z1, res=512, x_res_factor=10, y_res_factor=10,
-#                                   scale=5, f_params=f_params, img=None)
+# # img_data = sampler.generate_hires(z1, res=512, x_res_factor=10, y_res_factor=10, seed=0,
+# #                                   scale=5, f_params=f_params, img=img_null)
 # sampler.show_image(img_data)
 # time = datetime.now().strftime("%y-%m-%d-%H-%M-%S.%f")
-# figname = 'save/hires/' + time + '.png'
+# figname = 'save/hi_res/' + time + '.png'
 # imageio.imwrite(figname, (img_data * 255).astype(np.uint8), format='png')
 
 ################# CATERPILLAR IMAGES ##################
@@ -837,7 +818,7 @@ def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
 # num_layers = 6
 # c_dim = 3
 # img_null = tf.zeros((640, 640))
-# sampler = Sampler(z_dim = 8, scale = 8, net_size = net_size,
+# sampler = Sampler(z_dim = 8, scale = 8, net_size=net_size,
 #                   num_layers=num_layers, c_dim=c_dim, img=img_null)
 #
 # z2 = sampler.generate_z()
@@ -863,4 +844,45 @@ def generate_architecture(total_neurons, num_layers, omega, alpha, mu):
 #                       x_dim = 640, y_dim = 640, scale=10, f_params=f_params,
 #                       n_frame=240, reverse=False, img=None)
 #
+################# RECURSION TESTS ###################
+# net_size = [32, 32, 32, 16, 8, 4]
+# num_layers = len(net_size)
+# c_dim = 3
+# img_null = np.zeros((1080, 1080))
+# sampler = Sampler(z_dim=16, scale=8, net_size=net_size,
+#                   num_layers=num_layers, c_dim=c_dim, seed=0, img=img_null)
+#
+# i_r = 0
+# ##################
+# x_dim = 512
+# y_dim = 512
+# scale = 1
+# if i_r == 0:
+#     x, y = np.meshgrid(np.linspace(-scale, scale, x_dim), np.linspace(-scale, scale, y_dim))
+#     img = np.random.random()*x + np.random.random()*y + np.random.random()*np.sqrt(x**2 + y**2)
+# mu = 0.4  # image evolution rate
+# ##################
+#
+# z2 = sampler.generate_z()[0]
+# z_scale = 0
+# z_factor = np.random.normal(size=16) * z_scale
+#
+# sortidx = np.argsort(np.abs(z_factor))
+# sortidy = np.argsort(np.abs(z2[0]))
+#
+# z_factor = z_factor[sortidx]
+# z2 = z2[sortidy]
+# zz = z2 * z_factor
+# print(zz)
+# ##################
+#
+# ##################
+# # # pseed = 0
+# pseed = int(np.random.random() * 1e5 )
+# perlin_params = (0, 0.7, 6, 0.5, 2.0)
+# f_params = [0, 0, perlin_params, 0, 10]
+# ##################
+#
+# sampler.save_recursive_anim_png_seq(zz, img, img_evo=0.1, n_frame=100,
+#                             x_dim=x_dim, y_dim=y_dim, scale=scale, f_params=f_params)
 #

@@ -10,6 +10,7 @@ https://en.wikipedia.org/wiki/Compositional_pattern-producing_network
 import numpy as np
 import tensorflow as tf
 from ops import *
+from noise import pnoise2
 
 
 class CPPN():
@@ -42,7 +43,8 @@ class CPPN():
         n_points = x_dim * y_dim
         self.n_points = n_points
 
-        self.x_vec, self.y_vec, self.r_vec, self.f_vec = self._coordinates(x_dim, y_dim, scale=scale, img=img)
+        self.x_vec, self.y_vec, self.r_vec, self.f_vec = self._coordinates(x_dim, y_dim, seed=seed, scale=scale,
+                                                                           img=img)
 
         # latent vector
         self.z = tf.placeholder(tf.float32, [self.batch_size, self.z_dim], name='z')
@@ -83,14 +85,15 @@ class CPPN():
         # TODO: tf.variables_initializer??
         self.sess.run(init)
 
-    def _coordinates(self, x_dim=32, y_dim=32, scale=1.0,
+    def _coordinates(self, x_dim=32, y_dim=32, scale=1.0, seed=0,
                      f_params=None, img=None):
         '''
         calculates and returns a vector of x and y coordintes, and corresponding radius from the centre of image.
         '''
         n_points = x_dim * y_dim
+        dim_ratio = x_dim / y_dim
         x_range = scale * (np.arange(x_dim) - (x_dim - 1) / 2.0) / (x_dim - 1) / 0.5
-        y_range = scale * (np.arange(y_dim) - (y_dim - 1) / 2.0) / (y_dim - 1) / 0.5
+        y_range = scale / dim_ratio * (np.arange(y_dim) - (y_dim - 1) / 2.0) / (y_dim - 1) / 0.5
         # x_range = 10 ** (scale * (np.arange(x_dim) - (x_dim - 1) / 2.0) / (x_dim - 1) / 0.5)
         # y_range = 10 ** (scale * (np.arange(y_dim) - (y_dim - 1) / 2.0) / (y_dim - 1) / 0.5)
 
@@ -143,14 +146,57 @@ class CPPN():
             w = 1
 
             af1 = 1
-            af2 = 1
+            af2 = np.ones(5) # perlin noise params
             af3 = 1
             af4 = 1
 
+        # x_mat = np.power(x_mat, w)
+        # y_mat = np.power(y_mat, 1)
+        # r_mat = np.power(r_mat, 1)
         # w = 5 * np.random.randn() + 1
+
+        # x_mat = np.power(x_mat, 3) / (1 + np.power(x_mat, 4))
+        # y_mat = np.power(y_mat, 3) / (1 + np.power(y_mat, 4))
+        # y_mat = y_mat / (1 + np.power(y_mat, 2))
+        # y_mat = np.power(y_mat - 1, 3) * np.power(y_mat + 1, 3)
+
+        # x_mat = np.power(x_mat - 1, 3) * np.power(x_mat + 1, 3)
+        # y_mat = np.power(y_mat - 1, 3) * np.power(y_mat + 1, 3)
 
         # Sina's cheat input functions
         f1 = af1 * (np.cos(w * x_mat) + np.sin(w * y_mat))
+
+        # x_mat = np.power(x_mat, 2)
+        # y_mat = np.power(y_mat, 2)
+        # scale = 1
+        # octaves = 6
+        # persistence = 0.5
+        # lacunarity = 2.0
+        scale = af2[1]
+        octaves = int(af2[2])
+        persistence = af2[3]
+        lacunarity = af2[4]
+        np.random.seed(seed)
+        xseed = np.random.uniform(-scale, scale)
+        yseed = np.random.uniform(-scale, scale)
+        f2 = np.zeros((y_dim, x_dim))
+        for i in range(len(x_mat[0, :])):
+            for j in range(len(y_mat[:, 0])):
+                x = x_mat[0, i] + xseed
+                y = y_mat[j, 0] + yseed
+                f2[j][i] = pnoise2(x / scale,
+                                   y / scale,
+                                   octaves=octaves,
+                                   persistence=persistence,
+                                   lacunarity=lacunarity,
+                                   repeatx=x_dim,
+                                   repeaty=y_dim, base=0)
+
+        f2 = af2[0] * f2
+
+        # x_mat = np.multiply(x_mat, 0)
+        # y_mat = np.multiply(y_mat, 0)
+        # r_mat = np.multiply(r_mat, 0)
 
         # r = 0.1
         # r2 = 0.9
@@ -164,30 +210,35 @@ class CPPN():
         # r_mat_new = np.sqrt(x_mat * x_mat + (-y_mat - offset) * (-y_mat - offset))
         # heart = (2 - 2 * np.sin(theta) + np.sin(theta) * np.sqrt(np.abs(np.cos(theta))) / (np.sin(theta) + 1.4)) ** r
         # heart *= 1 / np.max(heart)
-        # f1 = af1 * r_mat_new * (1 - r2 * heart)
+        # f2 = af2 * r_mat_new * (1 - r2 * heart)
 
         # f1 = af1 * (np.tan(w * x_mat) + np.tan(w * y_mat))
         # f1 = af1 * np.cosh(w * r_mat)
         # f2 = af2 * np.tanh(5 + y_mat)
-        # f3 = af3 * np.tanh(5 + x_mat)
+        f3 = af3 * np.tanh(x_mat)
 
         # f2 = af2 * np.tanh(x_mat)
-        f2 = af2 * (np.sin(w * x_mat ** 2) * np.cos(w * y_mat ** 2))
-        f3 = af3 * np.cosh(w * r_mat)
+        # f2 = af2 * (np.sin(w * x_mat ** 2) * np.cos(w * y_mat ** 2))
+        # f3 = af3 * np.cosh(w * r_mat)
         f_mat = [f1, f2, f3]
-        # x_mat = np.power(x_mat, w)
-        # y_mat = np.power(y_mat, w)
-        # r_mat = np.power(r_mat, w)
+        x_mat = np.multiply(x_mat, w)
+        y_mat = np.multiply(y_mat, w)
+        r_mat = np.multiply(r_mat, w)
 
         if img is not None:
             if img.shape[0] == x_mat.shape[0] and img.shape[1] == x_mat.shape[1]:
-                f_mat.append(af4 * img)
+                if len(np.shape(img)) == 3:
+                    for ii in range(img.shape[2]):
+                        f_mat.append(af4 * img[:, :, ii])
+                else:
+                    f_mat.append(af4 * img)
             else:
-                print('Input image is not the same dims as x_mat/y_mat.')
+                f_mat.append(af4 * img[0:x_dim, 0:y_dim])
+                print('Input image is not the same dims as x_mat/y_mat. Cropping input.')
 
         # Sina's mods
-        # x_mat = np.power(x_mat, 3)
-        # y_mat = np.power(y_mat, 3)
+        # x_mat = np.power(x_mat, 2)
+        # y_mat = np.power(y_mat, 2)
 
         x_mat = np.tile(x_mat.flatten(), self.batch_size).reshape(self.batch_size, n_points, 1)
         y_mat = np.tile(y_mat.flatten(), self.batch_size).reshape(self.batch_size, n_points, 1)
@@ -237,28 +288,37 @@ class CPPN():
             ###
             # # '''
             H = tf.nn.tanh(U)
-            for i in range(self.num_layers):
+            # H2 = tf.nn.sigmoid(U)
+            for i in range(1, self.num_layers):
                 # H = tf.nn.tanh(tf.math.pow(fully_connected(H, net_size[i], 'g_tanh_' + str(i)), 1))
                 # H = tf.nn.tanh(tf.math.pow(
                 #     fully_connected(H, net_size[i], 'g_tanh_' + str(i), clip = True, clip_min=-1, clip_max=1), 3))
 
                 # H = tf.nn.relu(tf.math.pow(
                 #     fully_connected(H, net_size[i], 'g_relu_' + str(i)), 1))
-
                 H = tf.nn.tanh(tf.math.pow(
-                    fully_connected(H, net_size[i], 'g_tanh_' + str(i)), 3))
+                    fully_connected(H, net_size[i], 'g_tanh_' + str(i), stddev=1,
+                                    clip=True, clip_min=-0.5, clip_max=0.5),
+                    3))
+
+                # H = tf.nn.tanh(tf.math.pow(
+                #     fully_connected(H, net_size[i], 'g_tanh_' + str(i)),
+                #     3))
+
+                # H2 = tf.nn.sigmoid(nn)
 
 
-                # ## convolution layers
+                ## convolution layers
                 # H = tf.reshape(H, [self.batch_size, x_dim, y_dim, -1])
                 # H = tf.layers.conv2d(
                 #     inputs=H,
                 #     filters=net_size[i],
-                #     kernel_size=[5, 5],
+                #     kernel_size=[20, 20],
                 #     padding="same",
                 #     activation=tf.nn.tanh,
                 #     name='g_conv_' + str(i))
-
+                # H = tf.reshape(H, [n_points, net_size[i]])
+            # H = tf.nn.tanh(tf.math.subtract(H, H2))
             H  = tf.reshape(H, [self.batch_size * n_points, - 1])
 
                 # H = lrelu(H)
@@ -274,9 +334,7 @@ class CPPN():
 
             # Hr = tf.sigmoid(fully_connected(Hr, c_dim, 'g_tanh_r_' + str(i)))
 
-            # output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
             # output = 0.5 * tf.sin(fully_connected(H, self.c_dim, 'g_final')) + 0.5
-            # output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
             output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
             # output = 0.5 * tf.nn.tanh(fully_connected(H, self.c_dim, 'g_final')) + 0.5
             # '''
@@ -350,7 +408,7 @@ class CPPN():
 
         return result
 
-    def generate(self, z=None, x_dim=26, y_dim=26, scale=8.0, f_params=None, img=None):
+    def generate(self, z=None, x_dim=26, y_dim=26, scale=8.0, seed=0, f_params=None, img=None):
         """ Generate data by sampling from latent space.
 
         If z is not None, data for this point in latent space is
@@ -364,7 +422,7 @@ class CPPN():
             # sample from Gaussian distribution
 
         G = self.generator(x_dim=x_dim, y_dim=y_dim, reuse=True)
-        x_vec, y_vec, r_vec, f_vec = self._coordinates(x_dim, y_dim, scale=scale, f_params=f_params, img=img)
+        x_vec, y_vec, r_vec, f_vec = self._coordinates(x_dim, y_dim, seed=seed, scale=scale, f_params=f_params, img=img)
         # create dict for tf.sess
         dict_data = {self.z: z, self.x: x_vec, self.y: y_vec, self.r: r_vec}
         # add custom inputs
@@ -375,7 +433,7 @@ class CPPN():
 
         return image
 
-    def generate_hires(self, z, res=512, x_res_factor=2, y_res_factor=2, scale=8.0,
+    def generate_hires(self, z, res=512, x_res_factor=2, y_res_factor=2, scale=8.0, seed=0,
                        f_params=None, img=None):
         """ Generate data by sampling from latent space.
         If z is not None, data for this point in latent space is
@@ -387,19 +445,19 @@ class CPPN():
         n_points = x_dim * y_dim
         x_dim_big = res * x_res_factor
         y_dim_big = res * y_res_factor
-        image_hires = np.zeros((x_dim_big, y_dim_big, self.c_dim))
+        image_hires = np.zeros((y_dim_big, x_dim_big, self.c_dim))
 
 
         G = self.generator(x_dim=x_dim, y_dim=y_dim, reuse=True)
-        x_vec, y_vec, r_vec, f_vec = self._coordinates(x_dim_big, y_dim_big,
+        x_vec, y_vec, r_vec, f_vec = self._coordinates(x_dim_big, y_dim_big, seed=seed,
                                                        scale=scale, f_params=f_params, img=img)
 
         # unflatten input vectors
-        x_vec = x_vec.reshape(x_dim_big, y_dim_big)
-        y_vec = y_vec.reshape(x_dim_big, y_dim_big)
-        r_vec = r_vec.reshape(x_dim_big, y_dim_big)
+        x_vec = x_vec.reshape(y_dim_big, x_dim_big)
+        y_vec = y_vec.reshape(y_dim_big, x_dim_big)
+        r_vec = r_vec.reshape(y_dim_big, x_dim_big)
         for ii in range(len(f_vec)):
-            f_vec[ii] = f_vec[ii].reshape(x_dim_big, y_dim_big)
+            f_vec[ii] = f_vec[ii].reshape(y_dim_big, x_dim_big)
 
         image=[]
         for ix in range(x_res_factor):
@@ -411,13 +469,16 @@ class CPPN():
                 y_end = y_start + res
 
                 # select smaller window
-                x_vec_small = x_vec[x_start:x_end, y_start:y_end]
-                y_vec_small = y_vec[x_start:x_end, y_start:y_end]
-                r_vec_small = r_vec[x_start:x_end, y_start:y_end]
+                # x_vec_small = x_vec[x_start:x_end, y_start:y_end]
+                # y_vec_small = y_vec[x_start:x_end, y_start:y_end]
+                # r_vec_small = r_vec[x_start:x_end, y_start:y_end]
+                x_vec_small = x_vec[y_start:y_end, x_start:x_end]
+                y_vec_small = y_vec[y_start:y_end, x_start:x_end]
+                r_vec_small = r_vec[y_start:y_end, x_start:x_end]
 
                 f_vec_small = []
                 for ii in range(len(f_vec)):
-                    f_vec_small.append(f_vec[ii][x_start:x_end, y_start:y_end])
+                    f_vec_small.append(f_vec[ii][y_start:y_end, x_start:x_end])
 
                 # re-flatten input
                 x_vec_small = np.tile(x_vec_small.flatten(), self.batch_size).reshape(self.batch_size, n_points, 1)
@@ -437,7 +498,7 @@ class CPPN():
                 run_opts = tf.RunOptions(report_tensor_allocations_upon_oom=True)
                 image = (self.sess.run(G, feed_dict=dict_data, options=run_opts))[0]
 
-                image_hires[x_start:x_end, y_start:y_end, :] = image
+                image_hires[y_start:y_end, x_start:x_end, :] = image
 
                 print('Preparing image section ' + str())
 
