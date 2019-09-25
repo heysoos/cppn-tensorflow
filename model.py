@@ -9,6 +9,7 @@ https://en.wikipedia.org/wiki/Compositional_pattern-producing_network
 
 import numpy as np
 import tensorflow as tf
+# from tensorflow.contrib.layers import fully_connected
 from ops import *
 from noise import pnoise2
 
@@ -83,6 +84,7 @@ class CPPN():
         init = tf.global_variables_initializer()
 
         # TODO: tf.variables_initializer??
+
         self.sess.run(init)
 
     def _coordinates(self, x_dim=32, y_dim=32, scale=1.0, seed=0,
@@ -151,7 +153,9 @@ class CPPN():
             af4 = 1
 
         # x_mat = np.power(x_mat, w)
-        # y_mat = np.power(y_mat, 1)
+        # y_mat = np.power(y_mat, w)
+        # x_mat = np.abs(x_mat)
+        # y_mat = np.abs(y_mat)
         # r_mat = np.power(r_mat, 1)
         # w = 5 * np.random.randn() + 1
 
@@ -215,7 +219,7 @@ class CPPN():
         # f1 = af1 * (np.tan(w * x_mat) + np.tan(w * y_mat))
         # f1 = af1 * np.cosh(w * r_mat)
         # f2 = af2 * np.tanh(5 + y_mat)
-        f3 = af3 * np.tanh(x_mat)
+        f3 = af3 * np.tanh(y_mat)
 
         # f2 = af2 * np.tanh(x_mat)
         # f2 = af2 * (np.sin(w * x_mat ** 2) * np.cos(w * y_mat ** 2))
@@ -226,15 +230,25 @@ class CPPN():
         r_mat = np.multiply(r_mat, w)
 
         if img is not None:
-            if img.shape[0] == x_mat.shape[0] and img.shape[1] == x_mat.shape[1]:
+            if img.shape[0] == x_dim and img.shape[1] == y_dim:
                 if len(np.shape(img)) == 3:
                     for ii in range(img.shape[2]):
                         f_mat.append(af4 * img[:, :, ii])
                 else:
                     f_mat.append(af4 * img)
             else:
-                f_mat.append(af4 * img[0:x_dim, 0:y_dim])
+                if len(np.shape(img)) == 3:
+                    for ii in range(img.shape[2]):
+                        f_mat.append(af4 * img[:x_dim, :y_dim, ii])
+                else:
+                    f_mat.append(af4 * img[0:x_dim, 0:y_dim])
                 print('Input image is not the same dims as x_mat/y_mat. Cropping input.')
+
+        # make sure self.f has the right number of inputs before we give it to the generator
+        if hasattr(self, 'f'):
+            while len(f_mat) < len(self.f):
+                f_mat.append(np.zeros((x_dim, y_dim)))
+
 
         # Sina's mods
         # x_mat = np.power(x_mat, 2)
@@ -270,6 +284,7 @@ class CPPN():
             for i in range(1, len(self.f)):
                 f_unroll.append(tf.reshape(self.f[i], [self.batch_size * n_points, 1]))
 
+
             U = fully_connected(z_unroll, net_size[0], 'g_0_z') + \
                 fully_connected(x_unroll, net_size[0], 'g_0_x', with_bias=False) + \
                 fully_connected(y_unroll, net_size[0], 'g_0_y', with_bias=False) + \
@@ -277,6 +292,7 @@ class CPPN():
 
             for i in range(0, len(f_unroll)):
                 U += fully_connected(f_unroll[i], net_size[0], 'g_0_f' + str(i), with_bias=False)
+
 
             '''
             Below are a bunch of examples of different CPPN configurations.
@@ -298,7 +314,7 @@ class CPPN():
                 #     fully_connected(H, net_size[i], 'g_relu_' + str(i)), 1))
                 H = tf.nn.tanh(tf.math.pow(
                     fully_connected(H, net_size[i], 'g_tanh_' + str(i), stddev=1,
-                                    clip=True, clip_min=-0.5, clip_max=0.5),
+                                    clip=True, clip_min=-0.75, clip_max=0.75  ),
                     3))
 
                 # H = tf.nn.tanh(tf.math.pow(
@@ -335,7 +351,7 @@ class CPPN():
             # Hr = tf.sigmoid(fully_connected(Hr, c_dim, 'g_tanh_r_' + str(i)))
 
             # output = 0.5 * tf.sin(fully_connected(H, self.c_dim, 'g_final')) + 0.5
-            output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final'))
+            output = tf.sigmoid(fully_connected(H, self.c_dim, 'g_final', with_bias=False))
             # output = 0.5 * tf.nn.tanh(fully_connected(H, self.c_dim, 'g_final')) + 0.5
             # '''
 
@@ -426,7 +442,7 @@ class CPPN():
         # create dict for tf.sess
         dict_data = {self.z: z, self.x: x_vec, self.y: y_vec, self.r: r_vec}
         # add custom inputs
-        dict_data.update({i: d for i, d in zip(self.f, f_vec)})
+        dict_data.update({i: d for i, d in zip(self.f[:len(f_vec)], f_vec)})
 
         run_opts = tf.RunOptions(report_tensor_allocations_upon_oom=True)
         image = self.sess.run(G, feed_dict=dict_data, options=run_opts)
@@ -508,3 +524,7 @@ class CPPN():
     def close(self):
         self.sess.close()
         tf.reset_default_graph()  # necessary?!
+
+    def sigmoid(self, input):
+
+        return 1 / (1 + np.exp(-input))

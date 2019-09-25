@@ -36,8 +36,7 @@ def correlation_distance(img_path, dmin, dmax, N):
 
     return corr_d_img
 
-def fft_autocorr(img_path, method='fft'):
-
+def fft_autocorr(img_path, method='fft_norm'):
 
     img = np.array(Image.open(img_path).convert('L')) / 255
 
@@ -60,6 +59,39 @@ def fft_autocorr(img_path, method='fft'):
     iu = np.triu_indices(n=shape[0], m=shape[1])
 
     return corr[iu]
+
+
+def fft_autocorr_norm(img, mass, I, clean=True):
+    ###
+    # calculate the auto-correlation of 'img' normalizing with respect to local means and variances
+    # I: np.ones(np.shape(img))
+    # mass: convolve(I, I)
+    # these matrices are not included in this function to save computation
+    ###
+    local_mean = scipy.signal.fftconvolve(img, I) / mass
+    sum_img_sqr = scipy.signal.fftconvolve(img ** 2, I)
+
+    if clean:
+        local_mean[local_mean < 0] = 0
+        sum_img_sqr[sum_img_sqr < 0] = 0
+
+    local_var = (sum_img_sqr - mass * local_mean ** 2) / mass
+
+    if clean:
+        local_var[local_var < 1e-8] = 1e-8
+        local_var[np.isinf(local_var)] = np.nan
+
+
+    G = scipy.signal.fftconvolve(img, img[::-1, ::-1])
+    means_terms = mass * -1 * (local_mean * local_mean[::-1, ::-1])
+    auto_corr = (G + means_terms) / (mass * np.sqrt(local_var * local_var[::-1, ::-1]))
+
+
+    shape = np.shape(auto_corr)
+    iu = np.triu_indices(n=shape[0], m=shape[1])
+
+    return auto_corr[iu]
+
 
 
 def load_image_directories(img_folder=None):
@@ -112,11 +144,11 @@ def random_walk(x1, y1, d, res):
 
     return x2, y2
 
-def generate_params(method, img_folder, corr_folder, dmin=None, dmax=None, N=None):
+def generate_params(method, img_folder, corr_folder, dmin=None, dmax=None, N=None, takeLog=False):
 
     img_paths = load_image_directories(img_folder)
 
-    params = [ (method, img_path, corr_folder, dmin, dmax, N) for img_path in img_paths ]
+    params = [ (method, img_path, corr_folder, dmin, dmax, N, takeLog) for img_path in img_paths ]
 
     return params
 
@@ -136,10 +168,20 @@ def dist_vec(shape):
     return distu
 
 
-def calc_and_save_corrs(method, img_path, corr_folder, dmin=None, dmax=None, N=None):
+def calc_and_save_corrs(method, img_path, corr_folder, dmin=None, dmax=None, N=None, takeLog=False):
 
     if method == 'sample':
         corr = correlation_distance(img_path, dmin, dmax, N)
+    elif method == 'fft_norm':
+        #  TODO: logarithms behave weirdly....don't normalize properly and stuff
+        if takeLog:
+            img = np.array(Image.open(img_path).convert('L'))
+            img = np.log10(img + 1)
+        else:
+            img = np.array(Image.open(img_path).convert('L')) / 255
+        I = np.ones(np.shape(img))
+        mass = np.round(scipy.signal.fftconvolve(I, I))
+        corr = fft_autocorr_norm(img, mass, I, clean=True)
     elif method == 'fft' or method == 'fft_windowed':
         corr =  fft_autocorr(img_path, method)
     # elif method == 'full':
@@ -161,7 +203,7 @@ def calc_and_save_corrs(method, img_path, corr_folder, dmin=None, dmax=None, N=N
 
 if __name__ == '__main__':
 
-    method = 'fft_windowed'  # 'sample', 'fft', 'fft_windowed',  'full'
+    method = 'fft_norm'  # (DEFAULT: 'fft_norm'), 'sample', 'fft', 'fft_windowed', 'full'
 
     if method == 'sample':
         dmin = 1  # minimum distance
@@ -176,7 +218,7 @@ if __name__ == '__main__':
         os.makedirs(corr_folder)
 
     # params = generate_params(method, img_folder, corr_folder, dmin, dmax, N)
-    params = generate_params(method, img_folder, corr_folder)
+    params = generate_params(method, img_folder, corr_folder, takeLog=False)
 
     ## MULTIPROCESSING EXPERIMENTS ##
 
